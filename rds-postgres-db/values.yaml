@@ -1,0 +1,18 @@
+# RDS PostgreSQL Service — Static Configuration
+# These values are not exposed in the NP UI. They configure the execution
+# environment for the agent running this service.
+#
+# NOTE: In scripts, $VALUES is a FILE PATH (set by np service workflow exec --values).
+#       It is NOT JSON content. Read values with yaml_value() from build_context.
+
+# AWS region where RDS instances are created
+region: us-east-1
+
+# VPC ID where RDS instances will be deployed
+vpc_id: "vpc-0a5dfe8e463dee15d"
+
+# Named AWS profile for local testing (e.g. SSO profile with RDS access)
+# If set and AWS_PROFILE is not already in the environment, build_context
+# will export it so Terraform and AWS CLI use the correct credentials.
+# Run "aws sso login --profile <name>" before starting np-agent locally.
+aws_profile: ""

@@ -1,0 +1,11 @@
+steps:
+  - name: build context
+    type: script
+    file: $SERVICE_PATH/scripts/aws/build_context
+    output:
+      - name: TFSTATE_BUCKET
+        type: environment
+
+  - name: cleanup tfstate bucket
+    type: script
+    file: $SERVICE_PATH/scripts/aws/delete_tfstate_bucket

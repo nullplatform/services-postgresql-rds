@@ -1,0 +1,7 @@
+steps:
+  - name: build context
+    type: script
+    file: $SERVICE_PATH/scripts/aws/build_context
+    output:
+      - name: TFSTATE_BUCKET
+        type: environment

@@ -1,0 +1,34 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# write_service_outputs — Copies the rds-postgres-server's connection
+# attributes into this service's attributes via the NP API.
+#
+# hostname and port (export: true) become env vars in apps when a link is
+# activated. master_secret_arn (export: false) is used internally by
+# build_permissions_context during link actions.
+# ---------------------------------------------------------------------------
+
+SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+
+if [ -z "${SERVER_HOSTNAME:-}" ]; then
+  echo "WARNING: SERVER_HOSTNAME not set. Skipping attribute update."
+  exit 0
+fi
+
+ATTRS=$(jq -n \
+  --arg hostname           "$SERVER_HOSTNAME" \
+  --arg port               "${SERVER_PORT:-5432}" \
+  --arg master_secret_arn  "${SERVER_MASTER_SECRET_ARN:-}" \
+  '{
+    hostname: $hostname,
+    port:     ($port | tonumber)
+  } + (if $master_secret_arn != "" then {master_secret_arn: $master_secret_arn} else {} end)')
+
+echo "Updating service $SERVICE_ID attributes:"
+echo "  hostname: $SERVER_HOSTNAME"
+echo "  port:     ${SERVER_PORT:-5432}"
+
+np service patch --id "$SERVICE_ID" --body "{\"attributes\": $ATTRS}"
+echo "Service attributes updated successfully."

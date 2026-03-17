@@ -1,0 +1,60 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# reassign_owned — Before unlink, transfers ownership of all objects owned by
+# the app role to the master user in the app database.
+#
+# PostgreSQL refuses to DROP ROLE when the role still owns objects (tables,
+# sequences, etc. created by app migrations). Running REASSIGN OWNED in the
+# correct database (app_<id>) transfers ownership to master so the role can
+# be dropped cleanly.
+#
+# Requires: CONTEXT, SERVER_HOSTNAME, SERVER_PORT, SERVER_MASTER_SECRET_ARN
+# ---------------------------------------------------------------------------
+
+if [ "${LINK_NEVER_CREATED:-}" = "true" ]; then
+  echo "Link was never created successfully — skipping ownership reassignment."
+  exit 0
+fi
+
+APPLICATION_ID=$(echo "$CONTEXT" | jq -r '.tags.application_id // ""')
+
+if [ -z "$APPLICATION_ID" ]; then
+  echo "ERROR: Could not extract application_id from context tags." >&2
+  exit 1
+fi
+
+export DB_NAME="app_${APPLICATION_ID}"
+export DB_USERNAME="app_${APPLICATION_ID}"
+
+echo "Reassigning objects owned by ${DB_USERNAME} in database ${DB_NAME}..."
+
+MASTER_CREDS=$(aws secretsmanager get-secret-value \
+  --secret-id "$SERVER_MASTER_SECRET_ARN" \
+  --query 'SecretString' \
+  --output text)
+
+export MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
+export MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
+export DB_HOST="$SERVER_HOSTNAME"
+export DB_PORT="${SERVER_PORT:-5432}"
+
+# Ensure psql is available. Agent pod runs Alpine Linux — use apk.
+if ! command -v psql &>/dev/null; then
+  echo "psql not found, installing postgresql-client via apk..."
+  apk add --no-cache postgresql-client -q
+fi
+
+PGPASSWORD="$MASTER_PASS" psql \
+  -h "$DB_HOST" \
+  -p "$DB_PORT" \
+  -U "$MASTER_USER" \
+  -d "$DB_NAME" \
+  -v ON_ERROR_STOP=on \
+  -c "GRANT \"${DB_USERNAME}\" TO \"${MASTER_USER}\";" \
+  -c "REASSIGN OWNED BY \"${DB_USERNAME}\" TO \"${MASTER_USER}\";" \
+  -c "DROP OWNED BY \"${DB_USERNAME}\";" \
+  -c "REVOKE \"${DB_USERNAME}\" FROM \"${MASTER_USER}\";"
+
+echo "Ownership reassignment complete."

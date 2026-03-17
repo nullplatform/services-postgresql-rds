@@ -1,0 +1,101 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# build_context — Extracts variables from the NP notification context and
+# prepares the Terraform execution environment for service actions.
+#
+# For link actions, also extracts LINK_* variables consumed by
+# build_permissions_context in the next workflow step.
+# ---------------------------------------------------------------------------
+
+# --- Parse service context --------------------------------------------------
+
+SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+SERVICE_NAME=$(echo "$CONTEXT" | jq -r '.service.name // ""')
+SERVICE_NAME="${SERVICE_NAME:-svc-${SERVICE_ID}}"
+
+# Sanitize name for use in AWS resource identifiers (lowercase, alphanumeric + hyphens, max 55 chars)
+INSTANCE_NAME="np-$(echo "$SERVICE_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//;s/-*$//' | cut -c1-55)"
+
+# Merge .service.attributes with action .parameters.
+# CRITICAL: On the first "create" action, .service.attributes is empty or incomplete.
+# The user-provided values are in .parameters. The jq * operator merges objects
+# with the right-hand side taking precedence, so parameters always win.
+SERVICE_ATTRS=$(echo "$CONTEXT" | jq -r '(.service.attributes // {}) * (.parameters // {})')
+
+INSTANCE_CLASS=$(echo "$SERVICE_ATTRS"   | jq -r '.instance_class    // "db.t3.micro"')
+ALLOCATED_STORAGE=$(echo "$SERVICE_ATTRS" | jq -r '.allocated_storage // 20')
+POSTGRES_VERSION=$(echo "$SERVICE_ATTRS"  | jq -r '.postgres_version  // "16"')
+
+# --- Read static config from values.yaml ------------------------------------
+# CRITICAL: $VALUES is a FILE PATH set by "np service workflow exec --values <path>",
+# NOT JSON content. Use yaml_value() to read individual keys.
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+VPC_ID=$(yaml_value "vpc_id" "" "$VALUES")
+AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
+
+if [ -z "$VPC_ID" ]; then
+  echo "ERROR: vpc_id is required in values.yaml" >&2
+  exit 1
+fi
+
+if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
+  export AWS_PROFILE="${AWS_PROFILE_VAL}"
+fi
+
+# --- Ensure per-instance tfstate bucket exists ------------------------------
+# Each service instance gets its own S3 bucket so state is isolated and the
+# bucket name is deterministic (reconstructable from SERVICE_ID alone).
+# The agent IAM role must allow s3:CreateBucket + s3:PutBucketVersioning
+# on arn:aws:s3:::np-service-* and the usual Get/Put/Delete/List actions.
+
+TFSTATE_BUCKET="np-service-${SERVICE_ID}"
+
+if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
+  echo "Creating tfstate bucket: ${TFSTATE_BUCKET}"
+  if [ "$REGION" = "us-east-1" ]; then
+    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
+  else
+    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" \
+      --create-bucket-configuration LocationConstraint="$REGION"
+  fi
+  aws s3api put-bucket-versioning --bucket "$TFSTATE_BUCKET" \
+    --versioning-configuration Status=Enabled
+  echo "Bucket ${TFSTATE_BUCKET} created with versioning enabled."
+else
+  echo "Using existing tfstate bucket: ${TFSTATE_BUCKET}"
+fi
+
+export TFSTATE_BUCKET
+
+# --- Set Terraform execution variables --------------------------------------
+
+export OUTPUT_DIR="/tmp/np-service-${SERVICE_ID}"
+mkdir -p "$OUTPUT_DIR"
+
+export TOFU_MODULE_DIR="$SERVICE_PATH/deployment"
+
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=terraform.tfstate -backend-config=region=${REGION}"
+
+export TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=instance_name=${INSTANCE_NAME} -var=region=${REGION} -var=vpc_id=${VPC_ID} -var=instance_class=${INSTANCE_CLASS} -var=allocated_storage=${ALLOCATED_STORAGE} -var=postgres_version=${POSTGRES_VERSION}"
+
+# --- Extract link context (link workflows only) -----------------------------
+# These are consumed by build_permissions_context in the next workflow step.
+
+if [ "${ACTION_SOURCE:-}" = "link" ]; then
+  export LINK_ID=$(echo "$CONTEXT"   | jq -r '.link.id       // ""')
+  export LINK_NAME=$(echo "$CONTEXT" | jq -r '.link.name     // ""')
+  export SCOPE_ID=$(echo "$CONTEXT"  | jq -r '.link.scope.id // ""')
+  export SCOPE_NRN=$(echo "$CONTEXT" | jq -r '.link.scope.nrn // ""')
+
+  LINK_ATTRS=$(echo "$CONTEXT" | jq -r '(.link.attributes // {}) * (.parameters // {})')
+  export LINK_ACCESS_LEVEL=$(echo "$LINK_ATTRS" | jq -r '.access_level // "read-write"')
+fi

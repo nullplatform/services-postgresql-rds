@@ -1,0 +1,97 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# build_permissions_context — Prepares the Terraform execution environment
+# for link actions (link/unlink). Runs AFTER build_context, which has set:
+#   $CONTEXT, $VALUES, $SERVICE_PATH, $LINK_ID, $LINK_ACCESS_LEVEL
+#
+# This script creates a DB user per link. It reads master credentials from
+# Secrets Manager and passes them to Terraform via a sensitive.auto.tfvars
+# file (avoids exposing the password in the OS process list).
+# ---------------------------------------------------------------------------
+
+# IMPORTANT: This script has its own yaml_value() function.
+# Shell functions do NOT carry over between scripts; each script is isolated.
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+TFSTATE_BUCKET=$(yaml_value "tfstate_bucket" "" "$VALUES")
+AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
+
+if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
+  export AWS_PROFILE="${AWS_PROFILE_VAL}"
+fi
+
+# --- Read service outputs (set by write_service_outputs after RDS creation) -
+
+SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+SERVICE_ATTRS=$(echo "$CONTEXT" | jq -r '.service.attributes // {}')
+
+DB_HOST=$(echo "$SERVICE_ATTRS" | jq -r '.hostname // ""')
+DB_PORT=$(echo "$SERVICE_ATTRS" | jq -r '.port // "5432"')
+MASTER_SECRET_ARN=$(echo "$SERVICE_ATTRS" | jq -r '.master_secret_arn // ""')
+
+if [ -z "$DB_HOST" ]; then
+  echo "ERROR: Service hostname not found in service attributes." >&2
+  echo "       Has the RDS instance been created and write_service_outputs completed?" >&2
+  exit 1
+fi
+
+if [ -z "$MASTER_SECRET_ARN" ]; then
+  echo "ERROR: master_secret_arn not found in service attributes." >&2
+  exit 1
+fi
+
+# --- Retrieve master credentials from Secrets Manager ----------------------
+
+echo "Retrieving master credentials from Secrets Manager..."
+MASTER_CREDS=$(aws secretsmanager get-secret-value \
+  --secret-id "$MASTER_SECRET_ARN" \
+  --query 'SecretString' \
+  --output text)
+
+MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
+MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
+
+# --- Derive link-specific DB username from link ID -------------------------
+# Deterministic: always produces the same username for the same link.
+# Format: np_<first 16 hex chars of link ID>  (~20 chars, safe for Postgres)
+
+DB_USERNAME="np_$(echo "${LINK_ID}" | tr -d '-' | cut -c1-16 | tr '[:upper:]' '[:lower:]')"
+
+# --- Extract DB name from link parameters ----------------------------------
+# Merge .link.attributes with .parameters (parameters take precedence on create)
+
+LINK_ATTRS=$(echo "$CONTEXT" | jq -r '(.link.attributes // {}) * (.parameters // {})')
+DB_NAME=$(echo "$LINK_ATTRS" | jq -r '.db_name // ""')
+
+if [ -z "$DB_NAME" ]; then
+  echo "ERROR: db_name is required to create a link" >&2
+  exit 1
+fi
+
+# --- Prepare link-specific working directory --------------------------------
+# Override OUTPUT_DIR so each link has its own isolated workspace and tfstate.
+
+export OUTPUT_DIR="/tmp/np-link-${LINK_ID}"
+mkdir -p "$OUTPUT_DIR"
+
+# Write sensitive master password to auto.tfvars instead of -var= flag.
+# This keeps it out of the OS process list while Terraform is running.
+cat > "$OUTPUT_DIR/sensitive.auto.tfvars" <<EOF
+master_password = "${MASTER_PASS}"
+EOF
+
+# --- Set Terraform execution variables -------------------------------------
+
+export TOFU_MODULE_DIR="$SERVICE_PATH/permissions"
+
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=services/rds-postgres/${SERVICE_ID}/links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
+
+export TOFU_VARIABLES="-var=link_id=${LINK_ID} -var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME} -var=db_username=${DB_USERNAME} -var=master_username=${MASTER_USER} -var=access_level=${LINK_ACCESS_LEVEL:-read-write}"

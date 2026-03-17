@@ -1,0 +1,55 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# write_link_outputs — Reads Terraform outputs from the permissions module
+# and writes them to the NP link attributes via the API.
+#
+# hostname, port, username, database_name (export: true) become plain env vars.
+# password (export: {secret: true}) becomes a secret env var.
+# ---------------------------------------------------------------------------
+
+cd "$OUTPUT_DIR"
+
+LINK_ID_VAL=$(echo "$CONTEXT" | jq -r '.link.id')
+
+echo "Reading Terraform outputs for link $LINK_ID_VAL..."
+
+ALL_OUTPUTS=$(tofu output -json 2>/dev/null || echo "{}")
+HOSTNAME=$(echo "$ALL_OUTPUTS"         | jq -r '.hostname.value          // ""')
+PORT=$(echo "$ALL_OUTPUTS"             | jq -r '.port.value              // "" | tostring')
+DB_USERNAME=$(echo "$ALL_OUTPUTS"      | jq -r '.db_username.value       // ""')
+DB_PASSWORD=$(echo "$ALL_OUTPUTS"      | jq -r '.db_password.value       // ""')
+DATABASE_NAME=$(echo "$ALL_OUTPUTS"    | jq -r '.database_name.value     // ""')
+MASTER_SECRET_ARN=$(echo "$ALL_OUTPUTS"| jq -r '.master_secret_arn.value // ""')
+
+if [ -z "$DB_USERNAME" ]; then
+  echo "WARNING: No db_username output found. Skipping link attribute update."
+  exit 0
+fi
+
+ATTRS=$(jq -n \
+  --arg hostname          "$HOSTNAME" \
+  --arg port              "$PORT" \
+  --arg username          "$DB_USERNAME" \
+  --arg password          "$DB_PASSWORD" \
+  --arg database_name     "$DATABASE_NAME" \
+  --arg master_secret_arn "$MASTER_SECRET_ARN" \
+  '{
+    hostname:          $hostname,
+    port:              ($port | tonumber),
+    username:          $username,
+    password:          $password,
+    database_name:     $database_name,
+    master_secret_arn: $master_secret_arn
+  }')
+
+echo "Updating link $LINK_ID_VAL attributes:"
+echo "  hostname:      $HOSTNAME"
+echo "  port:          $PORT"
+echo "  username:      $DB_USERNAME"
+echo "  database_name: $DATABASE_NAME"
+echo "  password:      ****"
+
+np link patch --id "$LINK_ID_VAL" --body "{\"attributes\": $ATTRS}"
+echo "Link attributes updated successfully."

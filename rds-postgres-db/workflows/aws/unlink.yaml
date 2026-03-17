@@ -1,0 +1,53 @@
+steps:
+  - name: build context
+    type: script
+    file: $SERVICE_PATH/scripts/aws/build_context
+    output:
+      - name: OUTPUT_DIR
+        type: environment
+      - name: TFSTATE_BUCKET
+        type: environment
+      - name: LINK_ID
+        type: environment
+      - name: LINK_NAME
+        type: environment
+      - name: SCOPE_ID
+        type: environment
+      - name: SCOPE_NRN
+        type: environment
+      - name: LINK_ACCESS_LEVEL
+        type: environment
+      - name: SERVER_HOSTNAME
+        type: environment
+      - name: SERVER_PORT
+        type: environment
+      - name: SERVER_MASTER_SECRET_ARN
+        type: environment
+      - name: LINK_NEVER_CREATED
+        type: environment
+
+  - name: build permissions context
+    type: script
+    file: $SERVICE_PATH/scripts/aws/build_permissions_context
+    output:
+      - name: OUTPUT_DIR
+        type: environment
+      - name: TOFU_MODULE_DIR
+        type: environment
+      - name: TOFU_INIT_VARIABLES
+        type: environment
+      - name: TOFU_VARIABLES
+        type: environment
+
+  - name: reassign owned objects
+    type: script
+    file: $SERVICE_PATH/scripts/aws/reassign_owned
+
+  - name: tofu
+    type: script
+    file: $SERVICE_PATH/scripts/aws/do_tofu
+    configuration:
+      TOFU_ACTION: destroy
+      # Destroy only access resources (role + grants). The database is preserved
+      # so data survives unlink and is available if the app re-links later.
+      TOFU_TARGETS: "postgresql_default_privileges.sequences,postgresql_grant.sequences,postgresql_default_privileges.tables,postgresql_grant.tables,postgresql_grant.schema_usage,postgresql_grant.connect,postgresql_role.app_user,random_password.user"

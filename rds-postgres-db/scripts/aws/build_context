@@ -1,0 +1,138 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# build_context — Prepares the execution environment for rds-postgres-db
+# service actions.
+#
+# Service create/update/delete: no AWS attributes to resolve — just creates
+# the per-service S3 bucket used to store link tfstate files.
+#
+# Link/unlink: reads server_service_id from link parameters, fetches the
+# rds-postgres-server's connection attributes via np service read, and
+# exports them for build_permissions_context.
+# ---------------------------------------------------------------------------
+
+SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+
+# --- Read static config from values.yaml ------------------------------------
+
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
+
+if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
+  export AWS_PROFILE="${AWS_PROFILE_VAL}"
+fi
+
+# --- Ensure per-service S3 bucket exists (used for link tfstate) ------------
+
+TFSTATE_BUCKET="np-service-${SERVICE_ID}"
+
+if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
+  echo "Creating tfstate bucket: ${TFSTATE_BUCKET}"
+  if [ "$REGION" = "us-east-1" ]; then
+    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
+  else
+    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" \
+      --create-bucket-configuration LocationConstraint="$REGION"
+  fi
+  aws s3api put-bucket-versioning --bucket "$TFSTATE_BUCKET" \
+    --versioning-configuration Status=Enabled
+  echo "Bucket ${TFSTATE_BUCKET} created with versioning enabled."
+else
+  echo "Using existing tfstate bucket: ${TFSTATE_BUCKET}"
+fi
+
+export TFSTATE_BUCKET
+
+export OUTPUT_DIR="/tmp/np-service-${SERVICE_ID}"
+mkdir -p "$OUTPUT_DIR"
+
+# --- Link context (link/unlink workflows only) ------------------------------
+
+if [ "${ACTION_SOURCE:-}" = "link" ]; then
+  export LINK_ID=$(echo "$CONTEXT"   | jq -r '.link.id       // ""')
+  export LINK_NAME=$(echo "$CONTEXT" | jq -r '.link.name     // ""')
+  export SCOPE_ID=$(echo "$CONTEXT"  | jq -r '.link.scope.id // ""')
+  export SCOPE_NRN=$(echo "$CONTEXT" | jq -r '.link.scope.nrn // ""')
+
+  LINK_ATTRS=$(echo "$CONTEXT" | jq -r '(.link.attributes // {}) * (.parameters // {})')
+  export LINK_ACCESS_LEVEL=$(echo "$LINK_ATTRS" | jq -r '.access_level // "read-write"')
+
+  ACTION_TYPE=$(echo "$CONTEXT" | jq -r '.type // ""')
+
+  if [ "$ACTION_TYPE" = "delete" ]; then
+    # Unlink: read connection info from stored link attributes (written by write_link_outputs)
+    export SERVER_HOSTNAME=$(echo "$LINK_ATTRS"          | jq -r '.hostname          // ""')
+    export SERVER_PORT=$(echo "$LINK_ATTRS"              | jq -r '.port              // "5432"')
+    export SERVER_MASTER_SECRET_ARN=$(echo "$LINK_ATTRS" | jq -r '.master_secret_arn // ""')
+
+    if [ -z "$SERVER_HOSTNAME" ]; then
+      echo "WARNING: hostname not found in link attributes — link was never created successfully. Nothing to destroy."
+      export LINK_NEVER_CREATED=true
+      exit 0
+    fi
+    export LINK_NEVER_CREATED=false
+  else
+    # Link create/update: read connection info from the referenced server service
+    SERVER_SERVICE_ID=$(echo "$LINK_ATTRS" | jq -r '.server_service_id // ""')
+
+    if [ -z "$SERVER_SERVICE_ID" ]; then
+      NAMESPACE_NRN=$(echo "$CONTEXT" | jq -r '.entity_nrn // ""' | sed 's/:application=[^:]*$//')
+      LINK_DIMENSIONS=$(echo "$CONTEXT" | jq -c '.link.dimensions // {}')
+      echo "server_service_id not provided, auto-discovering RDS server in ${NAMESPACE_NRN} (dimensions: ${LINK_DIMENSIONS})..."
+
+      SERVER_SERVICES=$(np service list \
+        --nrn "$NAMESPACE_NRN" \
+        --type dependency \
+        --status active \
+        --format json | \
+        jq --argjson link_dims "$LINK_DIMENSIONS" \
+        '[(.results // .) | .[] | . as $svc | select(
+          (.attributes.hostname // "") != "" and
+          (.attributes.master_secret_arn // "") != "" and
+          ($link_dims | to_entries | all(. as $kv | ($svc.dimensions[$kv.key] // null) == $kv.value))
+        )]')
+      SERVER_COUNT=$(echo "$SERVER_SERVICES" | jq 'length')
+
+      if [ "$SERVER_COUNT" -eq 0 ]; then
+        echo "ERROR: No active RDS server service found in ${NAMESPACE_NRN} matching dimensions: ${LINK_DIMENSIONS}" >&2
+        echo "       Create an rds-postgres-server service with matching dimensions, or provide server_service_id explicitly." >&2
+        exit 1
+      elif [ "$SERVER_COUNT" -gt 1 ]; then
+        echo "ERROR: Multiple RDS server services found in ${NAMESPACE_NRN} matching dimensions: ${LINK_DIMENSIONS}" >&2
+        echo "       Specify server_service_id explicitly. Available options:" >&2
+        echo "$SERVER_SERVICES" | jq -r '.[] | "  - \(.id)  \(.name)  (\(.attributes.hostname))"' >&2
+        exit 1
+      fi
+
+      SERVER_SERVICE_ID=$(echo "$SERVER_SERVICES" | jq -r '.[0].id')
+      echo "Auto-discovered server service: ${SERVER_SERVICE_ID} ($(echo "$SERVER_SERVICES" | jq -r '.[0].name'))"
+    fi
+
+    echo "Reading rds-postgres-server attributes from service ${SERVER_SERVICE_ID}..."
+    SERVER_JSON=$(np service read --id "$SERVER_SERVICE_ID" --format json)
+
+    export SERVER_HOSTNAME=$(echo "$SERVER_JSON"          | jq -r '.attributes.hostname          // ""')
+    export SERVER_PORT=$(echo "$SERVER_JSON"              | jq -r '.attributes.port              // "5432"')
+    export SERVER_MASTER_SECRET_ARN=$(echo "$SERVER_JSON" | jq -r '.attributes.master_secret_arn // ""')
+
+    if [ -z "$SERVER_HOSTNAME" ]; then
+      echo "ERROR: server service ${SERVER_SERVICE_ID} has no hostname attribute." >&2
+      echo "       Has the rds-postgres-server been created successfully?" >&2
+      exit 1
+    fi
+
+    if [ -z "$SERVER_MASTER_SECRET_ARN" ]; then
+      echo "ERROR: server service ${SERVER_SERVICE_ID} has no master_secret_arn attribute." >&2
+      exit 1
+    fi
+  fi
+fi
