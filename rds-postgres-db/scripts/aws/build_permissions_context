@@ -5,12 +5,12 @@ set -euo pipefail
 # build_permissions_context — Prepares the Terraform execution environment
 # for link/unlink actions. Runs AFTER build_context, which has exported:
 #   $CONTEXT, $VALUES, $SERVICE_PATH, $LINK_ID, $LINK_ACCESS_LEVEL,
-#   $SCOPE_NRN, $TFSTATE_BUCKET,
-#   $SERVER_HOSTNAME, $SERVER_PORT, $SERVER_MASTER_SECRET_ARN
+#   $TFSTATE_BUCKET, $SERVER_HOSTNAME, $SERVER_PORT, $SERVER_MASTER_SECRET_ARN,
+#   $DB_NAME, $DB_USERNAME
 #
-# The database name and username are derived from the application ID
-# extracted from SCOPE_NRN, making them deterministic and idempotent
-# for the same application.
+# DB name and username come from service attributes (set during service create),
+# not derived from application_id. Master credentials are retrieved from
+# Secrets Manager for the PostgreSQL provider.
 # ---------------------------------------------------------------------------
 
 yaml_value() {
@@ -26,8 +26,6 @@ AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
 if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
   export AWS_PROFILE="${AWS_PROFILE_VAL}"
 fi
-
-# --- Use server connection info exported by build_context ------------------
 
 if [ "${LINK_NEVER_CREATED:-}" = "true" ]; then
   echo "Link was never created successfully — skipping permissions context setup."
@@ -48,6 +46,13 @@ if [ -z "$MASTER_SECRET_ARN" ]; then
   exit 1
 fi
 
+if [ -z "${DB_NAME:-}" ] || [ -z "${DB_USERNAME:-}" ]; then
+  echo "ERROR: DB_NAME or DB_USERNAME not set. Has the service been created successfully?" >&2
+  exit 1
+fi
+
+echo "Database: ${DB_NAME}, Username: ${DB_USERNAME}"
+
 # --- Retrieve master credentials from Secrets Manager ----------------------
 
 echo "Retrieving master credentials from Secrets Manager..."
@@ -58,26 +63,6 @@ MASTER_CREDS=$(aws secretsmanager get-secret-value \
 
 MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
 MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
-
-# --- Derive DB name and username from application ID -----------------------
-# Extract application_id from notification tags (always present in the context).
-# Both the database name and username are set to app_<application_id>,
-# making them deterministic and idempotent for the same application.
-
-APPLICATION_ID=$(echo "$CONTEXT" | jq -r '.tags.application_id // ""')
-
-if [ -z "$APPLICATION_ID" ]; then
-  echo "ERROR: Could not extract application_id from context tags." >&2
-  echo "       CONTEXT tags: $(echo "$CONTEXT" | jq -r '.tags // {}')" >&2
-  exit 1
-fi
-
-# PostgreSQL identifiers max 63 chars. "app_<id>" is well within that limit.
-DB_NAME="app_${APPLICATION_ID}"
-DB_USERNAME="app_${APPLICATION_ID}"
-
-echo "Database name: ${DB_NAME}"
-echo "DB username:   ${DB_USERNAME}"
 
 # --- Prepare link-specific working directory --------------------------------
 
@@ -92,8 +77,7 @@ EOF
 # --- Set Terraform execution variables -------------------------------------
 
 export TOFU_MODULE_DIR="$SERVICE_PATH/permissions"
-export TOFU_IMPORT_DB_NAME="$DB_NAME"
 
 export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
 
-export TOFU_VARIABLES="-var=link_id=${LINK_ID} -var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME} -var=db_username=${DB_USERNAME} -var=master_username=${MASTER_USER} -var=master_secret_arn=${MASTER_SECRET_ARN} -var=access_level=${LINK_ACCESS_LEVEL:-read-write}"
+export TOFU_VARIABLES="-var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME} -var=db_username=${DB_USERNAME} -var=master_username=${MASTER_USER} -var=access_level=${LINK_ACCESS_LEVEL:-read-write}"

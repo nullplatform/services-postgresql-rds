@@ -5,6 +5,46 @@ steps:
     output:
       - name: TFSTATE_BUCKET
         type: environment
+      - name: OUTPUT_DIR
+        type: environment
+      - name: SERVER_HOSTNAME
+        type: environment
+      - name: SERVER_PORT
+        type: environment
+      - name: SERVER_MASTER_SECRET_ARN
+        type: environment
+      - name: DB_NAME
+        type: environment
+      - name: DB_USERNAME
+        type: environment
+
+  - name: build db setup context
+    type: script
+    file: $SERVICE_PATH/scripts/aws/build_db_setup_context
+    output:
+      - name: OUTPUT_DIR
+        type: environment
+      - name: TOFU_MODULE_DIR
+        type: environment
+      - name: TOFU_INIT_VARIABLES
+        type: environment
+      - name: TOFU_VARIABLES
+        type: environment
+      - name: SETUP_SKIPPED
+        type: environment
+
+  - name: reassign owned objects
+    type: script
+    file: $SERVICE_PATH/scripts/aws/reassign_owned
+
+  - name: tofu destroy role
+    type: script
+    file: $SERVICE_PATH/scripts/aws/do_tofu
+    configuration:
+      TOFU_ACTION: destroy
+      # Destroy only the user. The database is preserved with master as owner
+      # so data remains available for potential future use.
+      TOFU_TARGETS: "postgresql_role.app_user,random_password.user"
 
   - name: cleanup tfstate bucket
     type: script

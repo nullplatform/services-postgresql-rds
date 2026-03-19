@@ -2,37 +2,40 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# write_link_outputs — Reads Terraform outputs from the permissions module
-# and writes them to the NP link attributes via the API.
+# write_link_outputs — Reads credentials from the service attributes and
+# copies them to the NP link attributes via the API.
+#
+# Credentials (hostname, port, username, password, database_name) live at
+# service level. This script mirrors them to the link so that Nullplatform
+# can inject them as environment variables into the application.
 #
 # hostname, port, username, database_name (export: true) become plain env vars.
 # password (export: {secret: true}) becomes a secret env var.
 # ---------------------------------------------------------------------------
 
-cd "$OUTPUT_DIR"
-
 LINK_ID_VAL=$(echo "$CONTEXT" | jq -r '.link.id')
+SERVICE_ID=$(echo "$CONTEXT"  | jq -r '.service.id')
 
-echo "Reading Terraform outputs for link $LINK_ID_VAL..."
+echo "Reading service ${SERVICE_ID} credentials for link ${LINK_ID_VAL}..."
+SERVICE_JSON=$(np service read --id "$SERVICE_ID" --format json)
 
-ALL_OUTPUTS=$(tofu output -json 2>/dev/null || echo "{}")
-HOSTNAME=$(echo "$ALL_OUTPUTS"         | jq -r '.hostname.value          // ""')
-PORT=$(echo "$ALL_OUTPUTS"             | jq -r '.port.value              // "" | tostring')
-DB_USERNAME=$(echo "$ALL_OUTPUTS"      | jq -r '.db_username.value       // ""')
-DB_PASSWORD=$(echo "$ALL_OUTPUTS"      | jq -r '.db_password.value       // ""')
-DATABASE_NAME=$(echo "$ALL_OUTPUTS"    | jq -r '.database_name.value     // ""')
-MASTER_SECRET_ARN=$(echo "$ALL_OUTPUTS"| jq -r '.master_secret_arn.value // ""')
+HOSTNAME=$(echo "$SERVICE_JSON"         | jq -r '.attributes.hostname          // ""')
+PORT=$(echo "$SERVICE_JSON"             | jq -r '.attributes.port              // "5432" | tostring')
+USERNAME=$(echo "$SERVICE_JSON"         | jq -r '.attributes.username          // ""')
+PASSWORD=$(echo "$SERVICE_JSON"         | jq -r '.attributes.password          // ""')
+DATABASE_NAME=$(echo "$SERVICE_JSON"    | jq -r '.attributes.database_name     // ""')
+MASTER_SECRET_ARN=$(echo "$SERVICE_JSON"| jq -r '.attributes.master_secret_arn // ""')
 
-if [ -z "$DB_USERNAME" ]; then
-  echo "WARNING: No db_username output found. Skipping link attribute update."
+if [ -z "$USERNAME" ]; then
+  echo "WARNING: No username found in service attributes. Skipping link attribute update."
   exit 0
 fi
 
 ATTRS=$(jq -n \
   --arg hostname          "$HOSTNAME" \
   --arg port              "$PORT" \
-  --arg username          "$DB_USERNAME" \
-  --arg password          "$DB_PASSWORD" \
+  --arg username          "$USERNAME" \
+  --arg password          "$PASSWORD" \
   --arg database_name     "$DATABASE_NAME" \
   --arg master_secret_arn "$MASTER_SECRET_ARN" \
   '{
@@ -44,10 +47,10 @@ ATTRS=$(jq -n \
     master_secret_arn: $master_secret_arn
   }')
 
-echo "Updating link $LINK_ID_VAL attributes:"
+echo "Updating link ${LINK_ID_VAL} attributes:"
 echo "  hostname:      $HOSTNAME"
 echo "  port:          $PORT"
-echo "  username:      $DB_USERNAME"
+echo "  username:      $USERNAME"
 echo "  database_name: $DATABASE_NAME"
 echo "  password:      ****"
 

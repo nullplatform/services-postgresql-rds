@@ -2,33 +2,55 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# write_service_outputs — Copies the rds-postgres-server's connection
-# attributes into this service's attributes via the NP API.
+# write_service_outputs — Reads Terraform outputs from the db_setup module
+# and writes them to the NP service attributes via the API.
 #
-# hostname and port (export: true) become env vars in apps when a link is
-# activated. master_secret_arn (export: false) is used internally by
-# build_permissions_context during link actions.
+# hostname, port, username, database_name, master_secret_arn are stored on
+# the service. password is stored as a plain attribute so that link/unlink
+# workflows can copy it to link attributes for app env var injection.
 # ---------------------------------------------------------------------------
 
 SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
 
-if [ -z "${SERVER_HOSTNAME:-}" ]; then
-  echo "WARNING: SERVER_HOSTNAME not set. Skipping attribute update."
+cd "$OUTPUT_DIR"
+
+echo "Reading Terraform outputs for service ${SERVICE_ID}..."
+
+ALL_OUTPUTS=$(tofu output -json 2>/dev/null || echo "{}")
+HOSTNAME=$(echo "$ALL_OUTPUTS"         | jq -r '.hostname.value          // ""')
+PORT=$(echo "$ALL_OUTPUTS"             | jq -r '.port.value              // "" | tostring')
+USERNAME=$(echo "$ALL_OUTPUTS"         | jq -r '.db_username.value       // ""')
+PASSWORD=$(echo "$ALL_OUTPUTS"         | jq -r '.db_password.value       // ""')
+DATABASE_NAME=$(echo "$ALL_OUTPUTS"    | jq -r '.database_name.value     // ""')
+MASTER_SECRET_ARN=$(echo "$ALL_OUTPUTS"| jq -r '.master_secret_arn.value // ""')
+
+if [ -z "$HOSTNAME" ]; then
+  echo "WARNING: No hostname output found. Skipping service attribute update."
   exit 0
 fi
 
 ATTRS=$(jq -n \
-  --arg hostname           "$SERVER_HOSTNAME" \
-  --arg port               "${SERVER_PORT:-5432}" \
-  --arg master_secret_arn  "${SERVER_MASTER_SECRET_ARN:-}" \
+  --arg hostname          "$HOSTNAME" \
+  --arg port              "$PORT" \
+  --arg username          "$USERNAME" \
+  --arg password          "$PASSWORD" \
+  --arg database_name     "$DATABASE_NAME" \
+  --arg master_secret_arn "$MASTER_SECRET_ARN" \
   '{
-    hostname: $hostname,
-    port:     ($port | tonumber)
-  } + (if $master_secret_arn != "" then {master_secret_arn: $master_secret_arn} else {} end)')
+    hostname:          $hostname,
+    port:              ($port | tonumber),
+    username:          $username,
+    password:          $password,
+    database_name:     $database_name,
+    master_secret_arn: $master_secret_arn
+  }')
 
-echo "Updating service $SERVICE_ID attributes:"
-echo "  hostname: $SERVER_HOSTNAME"
-echo "  port:     ${SERVER_PORT:-5432}"
+echo "Updating service ${SERVICE_ID} attributes:"
+echo "  hostname:      $HOSTNAME"
+echo "  port:          $PORT"
+echo "  username:      $USERNAME"
+echo "  database_name: $DATABASE_NAME"
+echo "  password:      ****"
 
 np service patch --id "$SERVICE_ID" --body "{\"attributes\": $ATTRS}"
 echo "Service attributes updated successfully."

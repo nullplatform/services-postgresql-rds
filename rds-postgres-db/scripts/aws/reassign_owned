@@ -2,31 +2,21 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# reassign_owned — Before unlink, transfers ownership of all objects owned by
-# the app role to the master user in the app database.
+# reassign_owned — Before dropping the app role (service delete), transfers
+# ownership of all objects owned by the app user to the master user.
 #
 # PostgreSQL refuses to DROP ROLE when the role still owns objects (tables,
-# sequences, etc. created by app migrations). Running REASSIGN OWNED in the
-# correct database (app_<id>) transfers ownership to master so the role can
-# be dropped cleanly.
+# sequences, etc. created by app migrations). REASSIGN OWNED transfers
+# ownership to master so the role can be dropped cleanly.
 #
-# Requires: CONTEXT, SERVER_HOSTNAME, SERVER_PORT, SERVER_MASTER_SECRET_ARN
+# Requires: SERVER_HOSTNAME, SERVER_PORT, SERVER_MASTER_SECRET_ARN,
+#           DB_NAME, DB_USERNAME (all exported by build_context)
 # ---------------------------------------------------------------------------
 
-if [ "${LINK_NEVER_CREATED:-}" = "true" ]; then
-  echo "Link was never created successfully — skipping ownership reassignment."
+if [ -z "${DB_NAME:-}" ] || [ -z "${DB_USERNAME:-}" ]; then
+  echo "DB_NAME or DB_USERNAME not set — skipping ownership reassignment."
   exit 0
 fi
-
-APPLICATION_ID=$(echo "$CONTEXT" | jq -r '.tags.application_id // ""')
-
-if [ -z "$APPLICATION_ID" ]; then
-  echo "ERROR: Could not extract application_id from context tags." >&2
-  exit 1
-fi
-
-export DB_NAME="app_${APPLICATION_ID}"
-export DB_USERNAME="app_${APPLICATION_ID}"
 
 echo "Reassigning objects owned by ${DB_USERNAME} in database ${DB_NAME}..."
 
@@ -35,10 +25,10 @@ MASTER_CREDS=$(aws secretsmanager get-secret-value \
   --query 'SecretString' \
   --output text)
 
-export MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
-export MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
-export DB_HOST="$SERVER_HOSTNAME"
-export DB_PORT="${SERVER_PORT:-5432}"
+MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
+MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
+DB_HOST="$SERVER_HOSTNAME"
+DB_PORT="${SERVER_PORT:-5432}"
 
 # Ensure psql is available. Agent pod runs Alpine Linux — use apk.
 if ! command -v psql &>/dev/null; then

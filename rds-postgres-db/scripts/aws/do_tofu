@@ -16,8 +16,13 @@ set -euo pipefail
 
 TOFU_ACTION="${TOFU_ACTION:-apply}"
 
-if [ "${LINK_NEVER_CREATED:-}" = "true" ]; then
-  echo "Link was never created successfully — skipping tofu ${TOFU_ACTION}."
+if [ "${LINK_NEVER_CREATED:-}" = "true" ] || [ "${SETUP_SKIPPED:-}" = "true" ]; then
+  echo "Skipping tofu ${TOFU_ACTION} — setup was not completed."
+  exit 0
+fi
+
+if [ -z "${TOFU_MODULE_DIR:-}" ]; then
+  echo "TOFU_MODULE_DIR not set — skipping tofu ${TOFU_ACTION}."
   exit 0
 fi
 

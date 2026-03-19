@@ -23,6 +23,10 @@ steps:
         type: environment
       - name: SERVER_MASTER_SECRET_ARN
         type: environment
+      - name: DB_NAME
+        type: environment
+      - name: DB_USERNAME
+        type: environment
       - name: LINK_NEVER_CREATED
         type: environment
 
@@ -39,15 +43,11 @@ steps:
       - name: TOFU_VARIABLES
         type: environment
 
-  - name: reassign owned objects
-    type: script
-    file: $SERVICE_PATH/scripts/aws/reassign_owned
-
   - name: tofu
     type: script
     file: $SERVICE_PATH/scripts/aws/do_tofu
     configuration:
       TOFU_ACTION: destroy
-      # Destroy only access resources (role + grants). The database is preserved
-      # so data survives unlink and is available if the app re-links later.
-      TOFU_TARGETS: "postgresql_default_privileges.sequences,postgresql_grant.sequences,postgresql_default_privileges.tables,postgresql_grant.tables,postgresql_grant.schema_usage,postgresql_grant.connect,postgresql_role.app_user,random_password.user"
+      # Destroy only grant resources. The database and user are preserved at
+      # service level — data survives unlink and access can be re-granted later.
+      TOFU_TARGETS: "postgresql_default_privileges.sequences,postgresql_grant.sequences,postgresql_default_privileges.tables,postgresql_grant.tables,postgresql_grant.schema_usage,postgresql_grant.connect"

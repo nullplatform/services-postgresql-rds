@@ -3,14 +3,15 @@ set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # build_context — Prepares the execution environment for rds-postgres-db
-# service actions.
+# service and link actions.
 #
-# Service create/update/delete: no AWS attributes to resolve — just creates
-# the per-service S3 bucket used to store link tfstate files.
+# All actions: creates/verifies the per-service S3 tfstate bucket and reads
+#   the service's stored attributes (hostname, port, master_secret_arn,
+#   database_name, username) into environment variables.
 #
-# Link/unlink: reads server_service_id from link parameters, fetches the
-# rds-postgres-server's connection attributes via np service read, and
-# exports them for build_permissions_context.
+# Link/unlink: additionally exports link-specific variables (LINK_ID,
+#   LINK_ACCESS_LEVEL, etc.). For unlink, checks if the service was ever
+#   created; if not, sets LINK_NEVER_CREATED=true and exits cleanly.
 # ---------------------------------------------------------------------------
 
 SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
@@ -31,7 +32,7 @@ if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
   export AWS_PROFILE="${AWS_PROFILE_VAL}"
 fi
 
-# --- Ensure per-service S3 bucket exists (used for link tfstate) ------------
+# --- Ensure per-service S3 bucket exists (used for all tfstate files) -------
 
 TFSTATE_BUCKET="np-service-${SERVICE_ID}"
 
@@ -55,6 +56,17 @@ export TFSTATE_BUCKET
 export OUTPUT_DIR="/tmp/np-service-${SERVICE_ID}"
 mkdir -p "$OUTPUT_DIR"
 
+# --- Read stored service attributes (available after service create) --------
+
+echo "Reading service ${SERVICE_ID} attributes..."
+SERVICE_JSON=$(np service read --id "$SERVICE_ID" --format json)
+
+export SERVER_HOSTNAME=$(echo "$SERVICE_JSON"          | jq -r '.attributes.hostname          // ""')
+export SERVER_PORT=$(echo "$SERVICE_JSON"              | jq -r '.attributes.port              // "5432"')
+export SERVER_MASTER_SECRET_ARN=$(echo "$SERVICE_JSON" | jq -r '.attributes.master_secret_arn // ""')
+export DB_NAME=$(echo "$SERVICE_JSON"                  | jq -r '.attributes.database_name     // ""')
+export DB_USERNAME=$(echo "$SERVICE_JSON"              | jq -r '.attributes.username          // ""')
+
 # --- Link context (link/unlink workflows only) ------------------------------
 
 if [ "${ACTION_SOURCE:-}" = "link" ]; then
@@ -68,71 +80,10 @@ if [ "${ACTION_SOURCE:-}" = "link" ]; then
 
   ACTION_TYPE=$(echo "$CONTEXT" | jq -r '.type // ""')
 
-  if [ "$ACTION_TYPE" = "delete" ]; then
-    # Unlink: read connection info from stored link attributes (written by write_link_outputs)
-    export SERVER_HOSTNAME=$(echo "$LINK_ATTRS"          | jq -r '.hostname          // ""')
-    export SERVER_PORT=$(echo "$LINK_ATTRS"              | jq -r '.port              // "5432"')
-    export SERVER_MASTER_SECRET_ARN=$(echo "$LINK_ATTRS" | jq -r '.master_secret_arn // ""')
-
-    if [ -z "$SERVER_HOSTNAME" ]; then
-      echo "WARNING: hostname not found in link attributes — link was never created successfully. Nothing to destroy."
-      export LINK_NEVER_CREATED=true
-      exit 0
-    fi
-    export LINK_NEVER_CREATED=false
-  else
-    # Link create/update: read connection info from the referenced server service
-    SERVER_SERVICE_ID=$(echo "$LINK_ATTRS" | jq -r '.server_service_id // ""')
-
-    if [ -z "$SERVER_SERVICE_ID" ]; then
-      NAMESPACE_NRN=$(echo "$CONTEXT" | jq -r '.entity_nrn // ""' | sed 's/:application=[^:]*$//')
-      LINK_DIMENSIONS=$(echo "$CONTEXT" | jq -c '.link.dimensions // {}')
-      echo "server_service_id not provided, auto-discovering RDS server in ${NAMESPACE_NRN} (dimensions: ${LINK_DIMENSIONS})..."
-
-      SERVER_SERVICES=$(np service list \
-        --nrn "$NAMESPACE_NRN" \
-        --type dependency \
-        --status active \
-        --format json | \
-        jq --argjson link_dims "$LINK_DIMENSIONS" \
-        '[(.results // .) | .[] | . as $svc | select(
-          (.attributes.hostname // "") != "" and
-          (.attributes.master_secret_arn // "") != "" and
-          ($link_dims | to_entries | all(. as $kv | ($svc.dimensions[$kv.key] // null) == $kv.value))
-        )]')
-      SERVER_COUNT=$(echo "$SERVER_SERVICES" | jq 'length')
-
-      if [ "$SERVER_COUNT" -eq 0 ]; then
-        echo "ERROR: No active RDS server service found in ${NAMESPACE_NRN} matching dimensions: ${LINK_DIMENSIONS}" >&2
-        echo "       Create an rds-postgres-server service with matching dimensions, or provide server_service_id explicitly." >&2
-        exit 1
-      elif [ "$SERVER_COUNT" -gt 1 ]; then
-        echo "ERROR: Multiple RDS server services found in ${NAMESPACE_NRN} matching dimensions: ${LINK_DIMENSIONS}" >&2
-        echo "       Specify server_service_id explicitly. Available options:" >&2
-        echo "$SERVER_SERVICES" | jq -r '.[] | "  - \(.id)  \(.name)  (\(.attributes.hostname))"' >&2
-        exit 1
-      fi
-
-      SERVER_SERVICE_ID=$(echo "$SERVER_SERVICES" | jq -r '.[0].id')
-      echo "Auto-discovered server service: ${SERVER_SERVICE_ID} ($(echo "$SERVER_SERVICES" | jq -r '.[0].name'))"
-    fi
-
-    echo "Reading rds-postgres-server attributes from service ${SERVER_SERVICE_ID}..."
-    SERVER_JSON=$(np service read --id "$SERVER_SERVICE_ID" --format json)
-
-    export SERVER_HOSTNAME=$(echo "$SERVER_JSON"          | jq -r '.attributes.hostname          // ""')
-    export SERVER_PORT=$(echo "$SERVER_JSON"              | jq -r '.attributes.port              // "5432"')
-    export SERVER_MASTER_SECRET_ARN=$(echo "$SERVER_JSON" | jq -r '.attributes.master_secret_arn // ""')
-
-    if [ -z "$SERVER_HOSTNAME" ]; then
-      echo "ERROR: server service ${SERVER_SERVICE_ID} has no hostname attribute." >&2
-      echo "       Has the rds-postgres-server been created successfully?" >&2
-      exit 1
-    fi
-
-    if [ -z "$SERVER_MASTER_SECRET_ARN" ]; then
-      echo "ERROR: server service ${SERVER_SERVICE_ID} has no master_secret_arn attribute." >&2
-      exit 1
-    fi
+  if [ "$ACTION_TYPE" = "delete" ] && [ -z "$SERVER_HOSTNAME" ]; then
+    echo "WARNING: service has no hostname — service was never created successfully. Nothing to destroy."
+    export LINK_NEVER_CREATED=true
+    exit 0
   fi
+  export LINK_NEVER_CREATED=false
 fi

@@ -1,8 +1,3 @@
-variable "link_id" {
-  type        = string
-  description = "Nullplatform link ID (used as keeper to stabilize password across re-applies)"
-}
-
 variable "db_host" {
   type        = string
   description = "RDS endpoint hostname"
@@ -16,22 +11,17 @@ variable "db_port" {
 
 variable "db_name" {
   type        = string
-  description = "Database name to create inside the RDS instance"
+  description = "Database name (from service attributes)"
 }
 
 variable "db_username" {
   type        = string
-  description = "Username for the new database user (derived from link ID)"
+  description = "Database username (from service attributes)"
 }
 
 variable "master_username" {
   type        = string
   description = "Master username for connecting to PostgreSQL"
-}
-
-variable "master_secret_arn" {
-  type        = string
-  description = "ARN of the Secrets Manager secret for master credentials (stored in link attributes)"
 }
 
 variable "master_password" {

@@ -16,14 +16,6 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "required": [],
       "properties": {
-        "server_service_id": {
-          "type": "string",
-          "title": "RDS Server Service ID",
-          "description": "ID of the rds-postgres-server service. Auto-discovered from the namespace (override only if multiple exist).",
-          "editableOn": [],
-          "visibleOn": [],
-          "order": 1
-        },
         "access_level": {
           "enum": ["read", "write", "read-write"],
           "type": "string",
@@ -31,7 +23,7 @@
           "default": "read-write",
           "editableOn": ["create", "update"],
           "description": "Permission level: read (SELECT), write (INSERT/UPDATE/DELETE), read-write (both)",
-          "order": 2
+          "order": 1
         },
         "hostname": {
           "type": "string",
@@ -40,7 +32,7 @@
           "visibleOn": ["read"],
           "editableOn": [],
           "description": "RDS endpoint hostname",
-          "order": 3
+          "order": 2
         },
         "port": {
           "type": "number",
@@ -49,7 +41,7 @@
           "visibleOn": ["read"],
           "editableOn": [],
           "description": "RDS port",
-          "order": 4
+          "order": 3
         },
         "username": {
           "type": "string",
@@ -57,8 +49,8 @@
           "export": true,
           "visibleOn": ["read"],
           "editableOn": [],
-          "description": "Database username (derived from application ID)",
-          "order": 5
+          "description": "Database username",
+          "order": 4
         },
         "password": {
           "type": "string",
@@ -66,8 +58,8 @@
           "export": {"type": "environment_variable", "secret": true},
           "visibleOn": ["read"],
           "editableOn": [],
-          "description": "Database password (auto-generated)",
-          "order": 6
+          "description": "Database password (auto-generated at service create)",
+          "order": 5
         },
         "database_name": {
           "type": "string",
@@ -75,8 +67,8 @@
           "export": true,
           "visibleOn": ["read"],
           "editableOn": [],
-          "description": "Database name (derived from application ID)",
-          "order": 7
+          "description": "Database name",
+          "order": 6
         },
         "master_secret_arn": {
           "type": "string",

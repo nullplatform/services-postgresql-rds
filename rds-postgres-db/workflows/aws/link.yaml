@@ -23,6 +23,10 @@ steps:
         type: environment
       - name: SERVER_MASTER_SECRET_ARN
         type: environment
+      - name: DB_NAME
+        type: environment
+      - name: DB_USERNAME
+        type: environment
 
   - name: build permissions context
     type: script
@@ -35,8 +39,6 @@ steps:
       - name: TOFU_INIT_VARIABLES
         type: environment
       - name: TOFU_VARIABLES
-        type: environment
-      - name: TOFU_IMPORT_DB_NAME
         type: environment
 
   - name: tofu
