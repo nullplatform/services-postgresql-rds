@@ -45,3 +45,6 @@ echo "  db_instance_identifier: $DB_INSTANCE_IDENTIFIER"
 
 np service patch --id "$SERVICE_ID" --body "{\"attributes\": $ATTRS}"
 echo "Service attributes updated successfully."
+
+np service patch --id "$SERVICE_ID" --body '{"linkable_to": []}'
+echo "Service linkable_to set to []."
