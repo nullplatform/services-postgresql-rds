@@ -38,17 +38,16 @@ yaml_value() {
   echo "${val:-$default}"
 }
 
-REGION=$(yaml_value "region" "us-east-1" "$VALUES")
 AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
 
 if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
   export AWS_PROFILE="${AWS_PROFILE_VAL}"
 fi
 
-# --- Resolve VPC ID from nullplatform provider -------------------------------
-# The VPC provider (type: runtime_configuration) stores vpc.id at account
-# scope. We derive the account NRN from the service NRN by stripping from
-# :namespace= onward.
+# --- Resolve AWS context from nullplatform provider -------------------------
+# Both region and VPC are stored in runtime_configuration providers scoped to
+# the account. We derive the account NRN from the service NRN by stripping
+# everything from :namespace= onward, then query each provider by stored_keys.
 
 ACCOUNT_NRN=$(echo "$CONTEXT" | jq -r '.service.nrn // ""' | sed 's/:namespace=.*$//')
 
@@ -57,9 +56,32 @@ if [ -z "$ACCOUNT_NRN" ]; then
   exit 1
 fi
 
-echo "Looking up VPC provider for account: ${ACCOUNT_NRN}"
+NP_PROVIDERS=$(np provider list --nrn "$ACCOUNT_NRN" --format json)
 
-VPC_PROVIDER_ID=$(np provider list --nrn "$ACCOUNT_NRN" --format json \
+echo "Resolving region and VPC for account: ${ACCOUNT_NRN}"
+
+# Resolve region from the account provider (stored key: account.region)
+ACCOUNT_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
+  | jq -r '[.results[] | select(.data_source.stored_keys | contains(["account.region"]))] | first | .id // ""')
+
+if [ -z "$ACCOUNT_PROVIDER_ID" ] || [ "$ACCOUNT_PROVIDER_ID" = "null" ]; then
+  echo "ERROR: no account provider with account.region found for ${ACCOUNT_NRN}" >&2
+  exit 1
+fi
+
+ACCOUNT_PROVIDER_DATA=$(np provider read --id "$ACCOUNT_PROVIDER_ID" --format json)
+REGION=$(echo "$ACCOUNT_PROVIDER_DATA" | jq -r '.attributes.account.region // ""')
+
+if [ -z "$REGION" ]; then
+  echo "ERROR: account.region not found in provider ${ACCOUNT_PROVIDER_ID}" >&2
+  exit 1
+fi
+
+echo "Using region: ${REGION}"
+export REGION
+
+# Resolve VPC ID from the VPC provider (stored key: vpc.id)
+VPC_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
   | jq -r '[.results[] | select(.data_source.stored_keys | contains(["vpc.id"]))] | first | .id // ""')
 
 if [ -z "$VPC_PROVIDER_ID" ] || [ "$VPC_PROVIDER_ID" = "null" ]; then

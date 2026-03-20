@@ -5,6 +5,8 @@ steps:
     output:
       - name: OUTPUT_DIR
         type: environment
+      - name: REGION
+        type: environment
       - name: LINK_ID
         type: environment
       - name: LINK_NAME

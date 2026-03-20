@@ -5,6 +5,8 @@ steps:
     output:
       - name: OUTPUT_DIR
         type: environment
+      - name: REGION
+        type: environment
       - name: TOFU_MODULE_DIR
         type: environment
       - name: TOFU_INIT_VARIABLES

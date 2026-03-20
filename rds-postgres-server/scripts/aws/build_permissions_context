@@ -20,7 +20,12 @@ yaml_value() {
   echo "${val:-$default}"
 }
 
-REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+# REGION is exported by build_context (resolved from the nullplatform account provider).
+if [ -z "${REGION:-}" ]; then
+  echo "ERROR: REGION is not set. Expected to be exported by build_context." >&2
+  exit 1
+fi
+
 TFSTATE_BUCKET=$(yaml_value "tfstate_bucket" "" "$VALUES")
 AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
 

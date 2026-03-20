@@ -13,14 +13,11 @@ set -euo pipefail
 #   TFSTATE_BUCKET — name of the bucket to delete (np-service-<SERVICE_ID>)
 # ---------------------------------------------------------------------------
 
-yaml_value() {
-  local key="$1" default="$2" file="$3"
-  local val
-  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
-  echo "${val:-$default}"
-}
-
-REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+# REGION is exported by build_context (resolved from the nullplatform account provider).
+if [ -z "${REGION:-}" ]; then
+  echo "ERROR: REGION is not set. Expected to be exported by build_context." >&2
+  exit 1
+fi
 
 if [ -z "${TFSTATE_BUCKET:-}" ]; then
   echo "TFSTATE_BUCKET is not set, skipping bucket cleanup."

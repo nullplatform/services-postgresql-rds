@@ -5,9 +5,6 @@
 # NOTE: In scripts, $VALUES is a FILE PATH (set by np service workflow exec --values).
 #       It is NOT JSON content. Read values with yaml_value() from build_context.
 
-# AWS region where RDS instances are created
-region: us-east-1
-
 # Named AWS profile for local testing (e.g. SSO profile with RDS access)
 # If set and AWS_PROFILE is not already in the environment, build_context
 # will export it so Terraform and AWS CLI use the correct credentials.
