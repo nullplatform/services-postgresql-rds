@@ -39,17 +39,43 @@ yaml_value() {
 }
 
 REGION=$(yaml_value "region" "us-east-1" "$VALUES")
-VPC_ID=$(yaml_value "vpc_id" "" "$VALUES")
 AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
-
-if [ -z "$VPC_ID" ]; then
-  echo "ERROR: vpc_id is required in values.yaml" >&2
-  exit 1
-fi
 
 if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
   export AWS_PROFILE="${AWS_PROFILE_VAL}"
 fi
+
+# --- Resolve VPC ID from nullplatform provider -------------------------------
+# The VPC provider (type: runtime_configuration) stores vpc.id at account
+# scope. We derive the account NRN from the service NRN by stripping from
+# :namespace= onward.
+
+ACCOUNT_NRN=$(echo "$CONTEXT" | jq -r '.service.nrn // ""' | sed 's/:namespace=.*$//')
+
+if [ -z "$ACCOUNT_NRN" ]; then
+  echo "ERROR: could not derive account NRN from .service.nrn in context" >&2
+  exit 1
+fi
+
+echo "Looking up VPC provider for account: ${ACCOUNT_NRN}"
+
+VPC_PROVIDER_ID=$(np provider list --nrn "$ACCOUNT_NRN" --format json \
+  | jq -r '[.results[] | select(.data_source.stored_keys | contains(["vpc.id"]))] | first | .id // ""')
+
+if [ -z "$VPC_PROVIDER_ID" ] || [ "$VPC_PROVIDER_ID" = "null" ]; then
+  echo "ERROR: no VPC provider found for account ${ACCOUNT_NRN}" >&2
+  exit 1
+fi
+
+VPC_PROVIDER_DATA=$(np provider read --id "$VPC_PROVIDER_ID" --format json)
+VPC_ID=$(echo "$VPC_PROVIDER_DATA" | jq -r '.attributes.vpc.id // ""')
+
+if [ -z "$VPC_ID" ]; then
+  echo "ERROR: vpc.id not found in provider ${VPC_PROVIDER_ID}" >&2
+  exit 1
+fi
+
+echo "Using VPC: ${VPC_ID}"
 
 # --- Ensure per-instance tfstate bucket exists ------------------------------
 # Each service instance gets its own S3 bucket so state is isolated and the

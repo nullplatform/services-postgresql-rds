@@ -8,9 +8,6 @@
 # AWS region where RDS instances are created
 region: us-east-1
 
-# VPC ID where RDS instances will be deployed
-vpc_id: "vpc-0a5dfe8e463dee15d"
-
 # Named AWS profile for local testing (e.g. SSO profile with RDS access)
 # If set and AWS_PROFILE is not already in the environment, build_context
 # will export it so Terraform and AWS CLI use the correct credentials.
