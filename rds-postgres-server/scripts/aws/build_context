@@ -49,7 +49,7 @@ fi
 # the account. We derive the account NRN from the service NRN by stripping
 # everything from :namespace= onward, then query each provider by stored_keys.
 
-ACCOUNT_NRN=$(echo "$CONTEXT" | jq -r '.service.nrn // ""' | sed 's/:namespace=.*$//')
+ACCOUNT_NRN=$(echo "$CONTEXT" | jq -r '.service.nrn // .entity_nrn // ""' | sed 's/:namespace=.*$//')
 
 if [ -z "$ACCOUNT_NRN" ]; then
   echo "ERROR: could not derive account NRN from .service.nrn in context" >&2
