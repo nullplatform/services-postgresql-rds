@@ -56,10 +56,9 @@ if [ -z "$ACCOUNT_NRN" ]; then
   exit 1
 fi
 
-NP_PROVIDERS=$(np provider list --nrn "$ACCOUNT_NRN" --format json)
+NP_PROVIDERS=$(np provider list --nrn "$ACCOUNT_NRN" --format json --limit 100)
 
 echo "Resolving region and VPC for account: ${ACCOUNT_NRN}"
-echo "DEBUG np provider list output: ${NP_PROVIDERS}"
 
 # Resolve region from the account provider (stored key: account.region)
 ACCOUNT_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
