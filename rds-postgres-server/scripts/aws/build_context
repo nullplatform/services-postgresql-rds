@@ -59,10 +59,11 @@ fi
 NP_PROVIDERS=$(np provider list --nrn "$ACCOUNT_NRN" --format json)
 
 echo "Resolving region and VPC for account: ${ACCOUNT_NRN}"
+echo "DEBUG np provider list output: ${NP_PROVIDERS}"
 
 # Resolve region from the account provider (stored key: account.region)
 ACCOUNT_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
-  | jq -r '[.results[] | select((.data_source.stored_keys // []) | contains(["account.region"]))] | first | .id // ""')
+  | jq -r '[(.results // [])[] | select((.data_source.stored_keys // []) | contains(["account.region"]))] | first | .id // ""')
 
 if [ -z "$ACCOUNT_PROVIDER_ID" ] || [ "$ACCOUNT_PROVIDER_ID" = "null" ]; then
   echo "ERROR: no account provider with account.region found for ${ACCOUNT_NRN}" >&2
@@ -82,7 +83,7 @@ export REGION
 
 # Resolve VPC ID from the VPC provider (stored key: vpc.id)
 VPC_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
-  | jq -r '[.results[] | select((.data_source.stored_keys // []) | contains(["vpc.id"]))] | first | .id // ""')
+  | jq -r '[(.results // [])[] | select((.data_source.stored_keys // []) | contains(["vpc.id"]))] | first | .id // ""')
 
 if [ -z "$VPC_PROVIDER_ID" ] || [ "$VPC_PROVIDER_ID" = "null" ]; then
   echo "ERROR: no VPC provider found for account ${ACCOUNT_NRN}" >&2
