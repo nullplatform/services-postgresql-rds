@@ -7,6 +7,8 @@ steps:
         type: environment
       - name: REGION
         type: environment
+      - name: TFSTATE_BUCKET
+        type: environment
       - name: LINK_ID
         type: environment
       - name: LINK_NAME
