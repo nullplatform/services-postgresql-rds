@@ -36,6 +36,7 @@ fi
 # --- Read service outputs (set by write_service_outputs after RDS creation) -
 
 SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+ACTION_TYPE=$(echo "$CONTEXT" | jq -r '.type // ""')
 SERVICE_ATTRS=$(echo "$CONTEXT" | jq -r '.service.attributes // {}')
 
 DB_HOST=$(echo "$SERVICE_ATTRS" | jq -r '.hostname // ""')
@@ -77,6 +78,10 @@ LINK_ATTRS=$(echo "$CONTEXT" | jq -r '(.link.attributes // {}) * (.parameters //
 DB_NAME=$(echo "$LINK_ATTRS" | jq -r '.db_name // ""')
 
 if [ -z "$DB_NAME" ]; then
+  if [ "$ACTION_TYPE" = "delete" ]; then
+    echo "WARNING: unlink without db_name — link likely never fully created. Exiting cleanly."
+    exit 0
+  fi
   echo "ERROR: db_name is required to create a link" >&2
   exit 1
 fi
