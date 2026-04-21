@@ -26,11 +26,15 @@ if [ -z "${REGION:-}" ]; then
   exit 1
 fi
 
-TFSTATE_BUCKET=$(yaml_value "tfstate_bucket" "" "$VALUES")
 AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
 
 if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
   export AWS_PROFILE="${AWS_PROFILE_VAL}"
+fi
+
+if [ -z "${TFSTATE_BUCKET:-}" ]; then
+  echo "ERROR: TFSTATE_BUCKET is not set. Expected to be exported by build_context." >&2
+  exit 1
 fi
 
 # --- Read service outputs (set by write_service_outputs after RDS creation) -
