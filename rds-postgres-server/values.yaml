@@ -10,3 +10,9 @@
 # will export it so Terraform and AWS CLI use the correct credentials.
 # Run "aws sso login --profile <name>" before starting np-agent locally.
 aws_profile: ""
+
+# Provider categories the platform must resolve into CONTEXT.providers before
+# running workflow steps. identity-access-control is required by
+# scripts/aws/assume_role_step to look up the AssumeRole target ARN.
+provider_categories:
+  - identity-access-control
