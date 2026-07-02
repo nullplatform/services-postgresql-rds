@@ -115,6 +115,14 @@ This service requires minimal AWS permissions compared to `rds-postgres-server`.
 
 No RDS, EC2, or S3 permissions are needed.
 
+The `requirements/` Terraform module creates a dedicated IAM role
+(`nullplatform-<cluster_name>-rds-postgres-db-role`) holding this policy,
+with a trust policy allowing the nullplatform agent role to `sts:AssumeRole`
+on it. Pass `cluster_name` (required) and optionally `agent_role_arn`
+(defaults to `nullplatform-<cluster_name>-agent-role`) when applying it.
+Granting the agent itself permission to assume this role is handled
+separately, outside this module.
+
 ### Runtime Dependencies
 
 These tools are required inside the agent container:
