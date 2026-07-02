@@ -27,7 +27,7 @@ resource "aws_iam_role" "nullplatform_rds_postgres_db" {
 resource "aws_iam_policy" "nullplatform_rds_postgres_db_secretsmanager_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-secretsmanager-policy"
+  name        = "nullplatform-${var.cluster_name}-rds-postgres-db-secretsmanager-policy"
   description = "Policy for reading the RDS master password from Secrets Manager"
 
   policy = jsonencode({
