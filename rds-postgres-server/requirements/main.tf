@@ -27,25 +27,25 @@ resource "aws_iam_role" "nullplatform_rds_postgres_server" {
 resource "aws_iam_role_policy_attachment" "rds" {
   count      = local.iam_create ? 1 : 0
   role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
-  policy_arn = aws_iam_policy.nullplatform_rds_policy.arn
+  policy_arn = aws_iam_policy.nullplatform_rds_policy[0].arn
 }
 
 resource "aws_iam_role_policy_attachment" "rds_sg" {
   count      = local.iam_create ? 1 : 0
   role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
-  policy_arn = aws_iam_policy.nullplatform_rds_sg_policy.arn
+  policy_arn = aws_iam_policy.nullplatform_rds_sg_policy[0].arn
 }
 
 resource "aws_iam_role_policy_attachment" "rds_secretsmanager" {
   count      = local.iam_create ? 1 : 0
   role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
-  policy_arn = aws_iam_policy.nullplatform_rds_secretsmanager_policy.arn
+  policy_arn = aws_iam_policy.nullplatform_rds_secretsmanager_policy[0].arn
 }
 
 resource "aws_iam_role_policy_attachment" "rds_s3" {
   count      = local.iam_create ? 1 : 0
   role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
-  policy_arn = aws_iam_policy.nullplatform_rds_s3_policy.arn
+  policy_arn = aws_iam_policy.nullplatform_rds_s3_policy[0].arn
 }
 
 ################################################################################
@@ -54,6 +54,8 @@ resource "aws_iam_role_policy_attachment" "rds_s3" {
 
 # Grant permissions to manage RDS instances and subnet groups
 resource "aws_iam_policy" "nullplatform_rds_policy" {
+  count = local.iam_create ? 1 : 0
+
   name        = "nullplatform-${var.cluster_name}-rds-policy"
   description = "Policy for managing RDS instances and subnet groups"
 
@@ -93,6 +95,8 @@ resource "aws_iam_policy" "nullplatform_rds_policy" {
 
 # Grant permissions to manage EC2 security groups for RDS
 resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
+  count = local.iam_create ? 1 : 0
+
   name        = "nullplatform-${var.cluster_name}-rds-sg-policy"
   description = "Policy for managing EC2 security groups for RDS"
 
@@ -128,6 +132,8 @@ resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
 
 # Grant permissions to manage the per-link S3 bucket used to store tofu state
 resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
+  count = local.iam_create ? 1 : 0
+
   name        = "nullplatform-${var.cluster_name}-rds-s3-policy"
   description = "Policy for managing per-service S3 tfstate buckets (np-service-*)"
 
@@ -163,6 +169,8 @@ resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
 
 # Grant permissions to manage Secrets Manager secrets for RDS master password
 resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
+  count = local.iam_create ? 1 : 0
+
   name        = "nullplatform-${var.cluster_name}-rds-secretsmanager-policy"
   description = "Policy for managing Secrets Manager secrets for RDS master password"
 
