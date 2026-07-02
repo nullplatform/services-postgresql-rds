@@ -123,6 +123,14 @@ on it. Pass `cluster_name` (required) and optionally `agent_role_arn`
 Granting the agent itself permission to assume this role is handled
 separately, outside this module.
 
+This role and its policy are shared per **cluster**, not per linked
+`rds-postgres-server` instance — the `GetSecretValue` grant is scoped to the
+`nullplatform/rds/*` secret-name prefix (every master secret in the cluster
+following that naming convention), not to the single secret this particular
+service instance's link actually uses. Anything that assumes this role can
+read the master password of any `rds-postgres-server` in the cluster, not
+just the linked one.
+
 ### Runtime Dependencies
 
 These tools are required inside the agent container:
