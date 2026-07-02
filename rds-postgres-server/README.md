@@ -109,7 +109,13 @@ The agent executing this service needs the following IAM permissions (see `requi
 - **S3**: Full lifecycle on the `np-service-<SERVICE_ID>` bucket
 - **IAM**: `CreateServiceLinkedRole` (for RDS)
 
-The `requirements/` Terraform module can be used to create and attach the necessary IAM policies to an existing role.
+The `requirements/` Terraform module creates a dedicated IAM role
+(`nullplatform-<cluster_name>-rds-postgres-server-role`) holding these
+policies, with a trust policy allowing the nullplatform agent role to
+`sts:AssumeRole` on it. Pass `cluster_name` (required) and optionally
+`agent_role_arn` (defaults to `nullplatform-<cluster_name>-agent-role`) when
+applying it. Granting the agent itself permission to assume this role is
+handled separately, outside this module.
 
 ### Runtime Dependencies
 

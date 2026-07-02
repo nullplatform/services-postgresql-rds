@@ -1,28 +1,50 @@
 ################################################################################
-# Policy attachments (only when role_name is provided)
+# Permissions role — assumed by the nullplatform agent role (sts:AssumeRole)
+################################################################################
+
+resource "aws_iam_role" "nullplatform_rds_postgres_server" {
+  count = local.iam_create ? 1 : 0
+
+  name        = local.role_name
+  description = "Permissions role assumed by the nullplatform agent role for rds-postgres-server in cluster ${var.cluster_name}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { AWS = concat([local.agent_role_arn], var.additional_agent_role_arns) }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = local.iam_default_tags
+}
+
+################################################################################
+# Policy attachments
 ################################################################################
 
 resource "aws_iam_role_policy_attachment" "rds" {
-  count      = var.role_name != null ? 1 : 0
-  role       = var.role_name
+  count      = local.iam_create ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
   policy_arn = aws_iam_policy.nullplatform_rds_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "rds_sg" {
-  count      = var.role_name != null ? 1 : 0
-  role       = var.role_name
+  count      = local.iam_create ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
   policy_arn = aws_iam_policy.nullplatform_rds_sg_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "rds_secretsmanager" {
-  count      = var.role_name != null ? 1 : 0
-  role       = var.role_name
+  count      = local.iam_create ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
   policy_arn = aws_iam_policy.nullplatform_rds_secretsmanager_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "rds_s3" {
-  count      = var.role_name != null ? 1 : 0
-  role       = var.role_name
+  count      = local.iam_create ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
   policy_arn = aws_iam_policy.nullplatform_rds_s3_policy.arn
 }
 
@@ -32,7 +54,7 @@ resource "aws_iam_role_policy_attachment" "rds_s3" {
 
 # Grant permissions to manage RDS instances and subnet groups
 resource "aws_iam_policy" "nullplatform_rds_policy" {
-  name        = "nullplatform_${var.name}_rds_policy"
+  name        = "nullplatform-${var.cluster_name}-rds-policy"
   description = "Policy for managing RDS instances and subnet groups"
 
   policy = jsonencode({
@@ -71,7 +93,7 @@ resource "aws_iam_policy" "nullplatform_rds_policy" {
 
 # Grant permissions to manage EC2 security groups for RDS
 resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
-  name        = "nullplatform_${var.name}_rds_sg_policy"
+  name        = "nullplatform-${var.cluster_name}-rds-sg-policy"
   description = "Policy for managing EC2 security groups for RDS"
 
   policy = jsonencode({
@@ -106,7 +128,7 @@ resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
 
 # Grant permissions to manage the per-link S3 bucket used to store tofu state
 resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
-  name        = "nullplatform_${var.name}_rds_s3_policy"
+  name        = "nullplatform-${var.cluster_name}-rds-s3-policy"
   description = "Policy for managing per-service S3 tfstate buckets (np-service-*)"
 
   policy = jsonencode({
@@ -141,7 +163,7 @@ resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
 
 # Grant permissions to manage Secrets Manager secrets for RDS master password
 resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
-  name        = "nullplatform_${var.name}_rds_secretsmanager_policy"
+  name        = "nullplatform-${var.cluster_name}-rds-secretsmanager-policy"
   description = "Policy for managing Secrets Manager secrets for RDS master password"
 
   policy = jsonencode({
