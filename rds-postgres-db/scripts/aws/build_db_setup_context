@@ -49,13 +49,16 @@ else
     exit 0
   fi
 
-  # Service create: auto-discover rds-postgres-server with matching dimensions
-  NAMESPACE_NRN=$(echo "$CONTEXT" | jq -r '.entity_nrn // ""' | sed 's/:application=[^:]*$//')
+  # Service create: auto-discover rds-postgres-server with matching dimensions.
+  # Use entity_nrn as-is: np service list requires the exact NRN a service is
+  # scoped at (confirmed live — a namespace-level NRN with :application=...
+  # stripped off returns zero results even when matching services exist).
+  ENTITY_NRN=$(echo "$CONTEXT" | jq -r '.entity_nrn // ""')
   SERVICE_DIMENSIONS=$(echo "$CONTEXT" | jq -c '.service.dimensions // {}')
-  echo "Auto-discovering RDS server in ${NAMESPACE_NRN} (dimensions: ${SERVICE_DIMENSIONS})..."
+  echo "Auto-discovering RDS server in ${ENTITY_NRN} (dimensions: ${SERVICE_DIMENSIONS})..."
 
   SERVER_SERVICES=$(np service list \
-    --nrn "$NAMESPACE_NRN" \
+    --nrn "$ENTITY_NRN" \
     --type dependency \
     --status active \
     --format json | \
@@ -68,11 +71,11 @@ else
   SERVER_COUNT=$(echo "$SERVER_SERVICES" | jq 'length')
 
   if [ "$SERVER_COUNT" -eq 0 ]; then
-    echo "ERROR: No active RDS server found in ${NAMESPACE_NRN} matching dimensions: ${SERVICE_DIMENSIONS}" >&2
+    echo "ERROR: No active RDS server found in ${ENTITY_NRN} matching dimensions: ${SERVICE_DIMENSIONS}" >&2
     echo "       Create an rds-postgres-server service with matching dimensions first." >&2
     exit 1
   elif [ "$SERVER_COUNT" -gt 1 ]; then
-    echo "ERROR: Multiple RDS servers found in ${NAMESPACE_NRN} matching dimensions: ${SERVICE_DIMENSIONS}" >&2
+    echo "ERROR: Multiple RDS servers found in ${ENTITY_NRN} matching dimensions: ${SERVICE_DIMENSIONS}" >&2
     echo "       Available options:" >&2
     echo "$SERVER_SERVICES" | jq -r '.[] | "  - \(.id)  \(.name)  (\(.attributes.hostname))"' >&2
     exit 1
