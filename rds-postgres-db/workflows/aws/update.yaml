@@ -1,3 +1,5 @@
+provider_categories:
+  - identity-access-control
 steps:
   - name: assume role
     type: script
