@@ -8,9 +8,9 @@ resource "aws_security_group" "rds" {
   vpc_id      = var.vpc_id
 
   ingress {
-    from_port   = 5432
-    to_port     = 5432
-    protocol    = "tcp"
+    from_port = 5432
+    to_port   = 5432
+    protocol  = "tcp"
     # Use every CIDR block associated with the VPC, not just the primary one.
     # EKS clusters commonly add a secondary CIDR for pod networking (e.g. a
     # 100.x.x.x block alongside the primary 10.x.x.x one) — pods get IPs from
