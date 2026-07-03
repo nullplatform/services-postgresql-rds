@@ -11,7 +11,13 @@ resource "aws_security_group" "rds" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = [data.aws_vpc.main.cidr_block]
+    # Use every CIDR block associated with the VPC, not just the primary one.
+    # EKS clusters commonly add a secondary CIDR for pod networking (e.g. a
+    # 100.x.x.x block alongside the primary 10.x.x.x one) — pods get IPs from
+    # the secondary block, so restricting to the primary CIDR silently blocks
+    # agent-pod-to-RDS connectivity. Confirmed live: pod IP 100.17.11.188 vs
+    # RDS SG only allowing 10.16.0.0/16.
+    cidr_blocks = [for c in data.aws_vpc.main.cidr_block_associations : c.cidr_block]
   }
 
   egress {
