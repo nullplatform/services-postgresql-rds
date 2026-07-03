@@ -100,6 +100,37 @@ Exposed in the nullplatform UI when creating or updating the service:
 - The VPC must have private subnets tagged with `nullplatform/subnet-type=private`.
 - For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **namespace-level NRN**.
 
+Example registering the `aws-configuration` and `aws-networking-configuration`
+providers (typically applied once per cluster/account, at the account-level
+NRN — no `:namespace=...`):
+
+```hcl
+module "aws_cloud_provider" {
+  source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/cloud/aws/cloud?ref=<tag>"
+
+  nrn                     = "organization=<org>:account=<account>"
+  domain_name             = "<your-domain>"
+  hosted_private_zone_id  = "<private-hosted-zone-id>"
+}
+
+module "vpc_provider" {
+  source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/cloud/aws/vpc?ref=<tag>"
+
+  nrn                 = "organization=<org>:account=<account>"
+  vpc_id              = "<vpc-id>"
+  vpc_subnets         = ["<private-subnet-id-1>", "<private-subnet-id-2>", "..."]
+  vpc_security_groups = ["<node/cluster-security-group-id>", "..."]
+}
+```
+
+`vpc_subnets`/`vpc_security_groups` don't need to be scoped down to only
+what this service uses — pass whatever the cluster's VPC provider already
+uses for other scopes/services (e.g. all node/pod subnets and the cluster
+security group). This service only reads `vpc.id` from this provider; the
+actual subnets it deploys into come separately from
+`data.aws_subnets.private` (filtered by the `nullplatform/subnet-type=private`
+tag, not from this provider's `vpc_subnets` list).
+
 ### AWS IAM Permissions
 
 The agent executing this service needs the following IAM permissions (see `requirements/main.tf`):
@@ -125,7 +156,18 @@ Three separate pieces must all be in place for the agent to actually assume
 `requirements/` alone is not enough:
 
 1. **Apply `requirements/`** with `cluster_name` (and optionally
-   `agent_role_arn`) — creates the role and its trust policy (see above).
+   `agent_role_arn`) — creates the role and its trust policy (see above):
+   ```hcl
+   module "service_requirements_rds_postgres_server" {
+     source = "git::https://github.com/nullplatform/services.git//databases/rds-postgres-server/requirements?ref=<tag>"
+
+     cluster_name = "<cluster-name>"
+     # agent_role_arn = ""  # optional override; defaults to
+     #   arn:aws:iam::<account-id>:role/nullplatform-<cluster-name>-agent-role
+   }
+   ```
+   Read `module.service_requirements_rds_postgres_server.permissions_role_arn`
+   for the ARN needed in steps 2 and 3 below.
 2. **Grant the agent permission to assume it.** Not managed by
    `requirements/` — add an inline (or managed) policy to the **agent's own**
    IAM role:

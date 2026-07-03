@@ -140,7 +140,18 @@ Three separate pieces must all be in place for the agent to actually assume
 `requirements/` alone is not enough:
 
 1. **Apply `requirements/`** with `cluster_name` (and optionally
-   `agent_role_arn`) — creates the role and its trust policy (see above).
+   `agent_role_arn`) — creates the role and its trust policy (see above):
+   ```hcl
+   module "service_requirements_rds_postgres_db" {
+     source = "git::https://github.com/nullplatform/services.git//databases/rds-postgres-db/requirements?ref=<tag>"
+
+     cluster_name = "<cluster-name>"
+     # agent_role_arn = ""  # optional override; defaults to
+     #   arn:aws:iam::<account-id>:role/nullplatform-<cluster-name>-agent-role
+   }
+   ```
+   Read `module.service_requirements_rds_postgres_db.permissions_role_arn`
+   for the ARN needed in steps 2 and 3 below.
 2. **Grant the agent permission to assume it.** Not managed by
    `requirements/` — add an inline (or managed) policy to the **agent's own**
    IAM role:
