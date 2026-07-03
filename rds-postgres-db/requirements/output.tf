@@ -17,3 +17,8 @@ output "secretsmanager_policy_arn" {
   description = "ARN of the Secrets Manager read policy"
   value       = local.iam_create ? aws_iam_policy.nullplatform_rds_postgres_db_secretsmanager_policy[0].arn : ""
 }
+
+output "s3_policy_arn" {
+  description = "ARN of the per-service tfstate S3 policy"
+  value       = local.iam_create ? aws_iam_policy.nullplatform_rds_postgres_db_s3_policy[0].arn : ""
+}

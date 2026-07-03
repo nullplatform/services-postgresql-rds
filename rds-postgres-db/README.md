@@ -109,14 +109,15 @@ This ensures usernames are stable and reproducible even if the service is recrea
 
 ### AWS IAM Permissions
 
-This service requires minimal AWS permissions compared to `rds-postgres-server`. The agent only needs:
+This service requires minimal AWS permissions compared to `rds-postgres-server`. The agent needs:
 
 - **Secrets Manager**: `GetSecretValue` — to retrieve the master PostgreSQL password from the ARN stored in service attributes
+- **S3**: full lifecycle on the `np-service-<SERVICE_ID>` bucket — `build_context` creates and manages its own per-service Terraform state bucket, same as `rds-postgres-server`
 
-No RDS, EC2, or S3 permissions are needed.
+No RDS or EC2 permissions are needed.
 
 The `requirements/` Terraform module creates a dedicated IAM role
-(`nullplatform-<cluster_name>-rds-postgres-db-role`) holding this policy,
+(`nullplatform-<cluster_name>-rds-postgres-db-role`) holding these policies,
 with a trust policy allowing the nullplatform agent role to `sts:AssumeRole`
 on it. Pass `cluster_name` (required) and optionally `agent_role_arn`
 (defaults to `nullplatform-<cluster_name>-agent-role`) when applying it.
