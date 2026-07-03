@@ -106,6 +106,7 @@ This ensures usernames are stable and reproducible even if the service is recrea
   - Matching dimensions (e.g., both services must have `cluster: prod`)
   - Attributes `hostname` and `master_secret_arn` already set (i.e., RDS instance successfully provisioned)
 - The `rds-postgres-server` must expose a Secrets Manager secret with master PostgreSQL credentials
+- For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **namespace-level NRN**. Unlike `rds-postgres-server`, this service does not need `aws-configuration`/`aws-networking-configuration` providers — `build_context` reads `region` from `values.yaml` (default `us-east-1`), not from a nullplatform provider.
 
 ### AWS IAM Permissions
 
@@ -131,6 +132,72 @@ following that naming convention), not to the single secret this particular
 service instance's link actually uses. Anything that assumes this role can
 read the master password of any `rds-postgres-server` in the cluster, not
 just the linked one.
+
+### AssumeRole Setup Guide
+
+Three separate pieces must all be in place for the agent to actually assume
+`nullplatform-<cluster_name>-rds-postgres-db-role` at runtime — applying
+`requirements/` alone is not enough:
+
+1. **Apply `requirements/`** with `cluster_name` (and optionally
+   `agent_role_arn`) — creates the role and its trust policy (see above).
+2. **Grant the agent permission to assume it.** Not managed by
+   `requirements/` — add an inline (or managed) policy to the **agent's own**
+   IAM role:
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": "sts:AssumeRole",
+     "Resource": "arn:aws:iam::<account-id>:role/nullplatform-<cluster_name>-rds-postgres-db-role"
+   }
+   ```
+3. **Register the role as an `identity-access-control` provider** in
+   nullplatform, at the **namespace-level NRN**
+   (`organization=...:account=...:namespace=...` — without `:application=...`),
+   with selector `rds-postgres-db`:
+   ```hcl
+   module "identity_access_control" {
+     source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/identity-access-control?ref=<tag>"
+     nrn    = "organization=<org>:account=<account>:namespace=<namespace>"
+     attributes = {
+       iam_role_arns = {
+         arns = [{ selector = "rds-postgres-db", arn = "<role ARN from step 1>" }]
+       }
+     }
+   }
+   ```
+
+`scripts/aws/assume_role_step` resolves the role by querying
+`np provider list` / `np provider read` for this provider at the service's
+**namespace NRN** — not by reading `CONTEXT.providers[...]`. This was
+confirmed live: this platform's agent never populates `CONTEXT.providers`
+regardless of the `provider_categories` declared in `values.yaml` or the
+workflow YAMLs, so the lookup goes through the `np` CLI directly instead.
+
+**If any of the 3 steps is missing**, `assume_role_step` logs
+`assume_role=skipped (using agent credentials)` and the workflow proceeds
+under the **agent's own role** — which fails with `AccessDenied` on S3/
+Secrets Manager calls unless the agent happens to have those permissions
+directly attached. This fail-open behavior is intentional (mirrors
+`nullplatform/scopes-static-files`), but it means a misconfigured
+AssumeRole setup fails *silently* as what looks like a permissions problem
+rather than a missing-provider problem — check the `assume role` step's
+log line first when debugging `AccessDenied` errors from later steps.
+
+### Auto-Discovery NRN Requirement
+
+`scripts/aws/build_db_setup_context` looks up the active `rds-postgres-server`
+via `np service list --nrn <entity_nrn>`, using the service's **full
+`entity_nrn` as-is** (including the `:application=...` segment) — not a
+namespace-level NRN with that segment stripped. Confirmed live: querying
+`np service list` at the namespace level (`:application=...` removed)
+returns **zero results**, even when a healthy, matching `rds-postgres-server`
+exists — `np service list --nrn` requires the exact NRN a service is scoped
+at, it does not search hierarchically down from a broader NRN. If you see
+`ERROR: No active RDS server found in <nrn> matching dimensions: ...` and
+you're certain a matching, active server exists, check that this NRN is
+being derived correctly rather than assuming the server itself is
+misconfigured.
 
 ### Runtime Dependencies
 
@@ -180,3 +247,21 @@ This service uses dimensions to match the correct `rds-postgres-server`. If dime
 ### Service Must Exist Before Linking
 
 If the service was created but the `hostname` attribute is empty (e.g., provisioning failed), link operations exit cleanly without performing any database changes. Ensure the service is fully created before attempting to link applications.
+
+### Orphaned PostgreSQL Roles From Failed Creates
+
+The service-level username/database name are derived from `application_id`
+(`app_<application_id>`), which is the **same across every retry** of
+creating this service for a given application — unlike `service_id`, which
+is different each time. If a `create` action fails *after*
+`postgresql_role.app_user` is created in Postgres but *before* the
+workflow reaches `write service outputs` (so the service's `hostname`
+attribute never gets set), a later `delete` action can't clean it up: it
+checks the stored `hostname` attribute first, finds it empty, and skips
+DB cleanup entirely (see "Service Must Exist Before Linking" above) —
+leaving the Postgres role behind. The next `create` retry then fails with
+`role "app_<application_id>" already exists`, even though nullplatform has
+no record of a working service. If you hit this, connect to the RDS
+instance with master credentials and run
+`DROP ROLE IF EXISTS app_<application_id>;` (after reassigning/dropping any
+objects it owns, if it had time to create any) before retrying.

@@ -94,10 +94,11 @@ Exposed in the nullplatform UI when creating or updating the service:
 
 ### nullplatform Prerequisites
 
-- An active nullplatform account with at least one **provider** exposing:
-  - `account.region` — the AWS region where the RDS instance will be created
-  - `vpc.id` — the VPC where the RDS instance will be placed
-- The VPC must have private subnets tagged with `nullplatform/subnet-type=private`
+- An active nullplatform account with the following providers configured for the target namespace/dimensions:
+  - **`aws-configuration`** (from `tofu-modules//nullplatform/cloud/aws/cloud`) — exposes `account.region`. `build_context` resolves this via `np provider list --nrn <account-level NRN>` filtered by `stored_keys` containing `account.region`.
+  - **`aws-networking-configuration`** (from `tofu-modules//nullplatform/cloud/aws/vpc`) — exposes `vpc.id`, `vpc.subnets`, `vpc.security_groups`. Same lookup mechanism, filtered by `vpc.id`.
+- The VPC must have private subnets tagged with `nullplatform/subnet-type=private`.
+- For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **namespace-level NRN**.
 
 ### AWS IAM Permissions
 
@@ -116,6 +117,77 @@ policies, with a trust policy allowing the nullplatform agent role to
 `agent_role_arn` (defaults to `nullplatform-<cluster_name>-agent-role`) when
 applying it. Granting the agent itself permission to assume this role is
 handled separately, outside this module.
+
+### AssumeRole Setup Guide
+
+Three separate pieces must all be in place for the agent to actually assume
+`nullplatform-<cluster_name>-rds-postgres-server-role` at runtime — applying
+`requirements/` alone is not enough:
+
+1. **Apply `requirements/`** with `cluster_name` (and optionally
+   `agent_role_arn`) — creates the role and its trust policy (see above).
+2. **Grant the agent permission to assume it.** Not managed by
+   `requirements/` — add an inline (or managed) policy to the **agent's own**
+   IAM role:
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": "sts:AssumeRole",
+     "Resource": "arn:aws:iam::<account-id>:role/nullplatform-<cluster_name>-rds-postgres-server-role"
+   }
+   ```
+3. **Register the role as an `identity-access-control` provider** in
+   nullplatform, at the **namespace-level NRN**
+   (`organization=...:account=...:namespace=...` — without `:application=...`),
+   with selector `rds-postgres-server`:
+   ```hcl
+   module "identity_access_control" {
+     source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/identity-access-control?ref=<tag>"
+     nrn    = "organization=<org>:account=<account>:namespace=<namespace>"
+     attributes = {
+       iam_role_arns = {
+         arns = [{ selector = "rds-postgres-server", arn = "<role ARN from step 1>" }]
+       }
+     }
+   }
+   ```
+
+`scripts/aws/assume_role_step` resolves the role by querying
+`np provider list` / `np provider read` for this provider at the service's
+**namespace NRN** — not by reading `CONTEXT.providers[...]`. This was
+confirmed live: this platform's agent never populates `CONTEXT.providers`
+regardless of the `provider_categories` declared in `values.yaml` or the
+workflow YAMLs, so the lookup goes through the `np` CLI directly instead
+(the same mechanism `build_context` already uses for the region/VPC
+providers above).
+
+**If any of the 3 steps is missing**, `assume_role_step` logs
+`assume_role=skipped (using agent credentials)` and the workflow proceeds
+under the **agent's own role** — which fails with `AccessDenied` on
+RDS/EC2/Secrets Manager/S3 calls unless the agent happens to have those
+permissions directly attached (the old, pre-AssumeRole model). This
+fail-open behavior is intentional (mirrors `nullplatform/scopes-static-files`),
+but it means a misconfigured AssumeRole setup fails *silently* as what looks
+like a permissions problem rather than a missing-provider problem — check
+the `assume role` step's log line first when debugging `AccessDenied`
+errors from later steps.
+
+### Networking Requirements
+
+`deployment/main.tf`'s RDS security group allows ingress on 5432 from
+**every CIDR block associated with the VPC**
+(`data.aws_vpc.main.cidr_block_associations`), not just the primary one.
+This matters because EKS clusters commonly add a **secondary CIDR block**
+for pod networking (e.g. primary `10.x.x.x` for nodes, secondary
+`100.x.x.x` for pods via the AWS VPC CNI's custom networking/prefix
+delegation) — agent pods get IPs from the secondary range, not the
+primary one. If the VPC has more than one CIDR association, all of them
+are allowed automatically; no extra configuration is needed here. Symptom
+if this were ever restricted to a single CIDR: any step that touches the
+`postgresql` Terraform provider (this service's `db_setup`, or
+`rds-postgres-db`'s workflows) **hangs indefinitely** — the TCP connection
+attempt to the RDS endpoint never completes or times out quickly, it just
+stalls — rather than failing fast with a clear error.
 
 ### Runtime Dependencies
 
