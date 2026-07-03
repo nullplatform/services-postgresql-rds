@@ -6,24 +6,40 @@
 # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_SESSION_TOKEN as
 # output:environment so the engine propagates them to the following steps.
 #
-# The AWS IAM provider (category "identity-access-control") is read from
-# CONTEXT.providers[...], where the platform has ALREADY resolved it for the
-# service's dimensions. Requires "identity-access-control" to be listed in
-# provider_categories (values.yaml and/or the workflow).
+# The AWS IAM provider (type "aws-iam-configuration", stored key
+# "iam_role_arns.arns") is looked up directly via the np CLI, at the service's
+# namespace NRN, the same way build_context already looks up the
+# account.region/vpc.id providers. CONTEXT.providers[...] is NOT used here:
+# a live end-to-end test against a real agent confirmed it is never populated
+# by this platform version regardless of provider_categories declarations
+# (values.yaml and/or the workflow) — provider_categories is still declared
+# for forward-compatibility, but this script does not rely on it.
 #
 # Resolution precedence (see resolve_assume_role_arn in assume_role_lib):
 #   $RDS_POSTGRES_SERVER_ASSUME_ROLE_ARN -> IAM provider by selector
 #     -> $RDS_POSTGRES_SERVER_ASSUME_ROLE_ARN_DEFAULT -> agent credentials
 #
-# Requires: aws CLI, jq. Expects: CONTEXT (engine-injected), SERVICE_ID (optional).
+# Requires: aws CLI, np CLI, jq. Expects: CONTEXT (engine-injected), SERVICE_ID (optional).
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/assume_role_lib"
 
 RDS_POSTGRES_SERVER_ASSUME_ROLE_SELECTOR="${RDS_POSTGRES_SERVER_ASSUME_ROLE_SELECTOR:-rds-postgres-server}"
 
-# IAM provider as resolved for the service's dimensions by the platform.
-IAM_PROVIDER=$(echo "${CONTEXT:-}" | jq -c '.providers["identity-access-control"] // {}' 2>/dev/null)
+# Namespace NRN: same derivation build_context uses for its account NRN, but
+# keeping the namespace segment (strip only from :application= onward) since
+# the identity-access-control provider is registered at namespace level.
+NAMESPACE_NRN=$(echo "${CONTEXT:-}" | jq -r '.service.nrn // .entity_nrn // ""' | sed 's/:application=.*$//')
+
+IAM_PROVIDER="{}"
+if [ -n "$NAMESPACE_NRN" ]; then
+  NP_PROVIDERS=$(np provider list --nrn "$NAMESPACE_NRN" --format json --limit 100 2>/dev/null)
+  IAM_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
+    | jq -r '[(.results // [])[] | select((.data_source.stored_keys // []) | contains(["iam_role_arns.arns"]))] | first | .id // ""')
+  if [ -n "$IAM_PROVIDER_ID" ] && [ "$IAM_PROVIDER_ID" != "null" ]; then
+    IAM_PROVIDER=$(np provider read --id "$IAM_PROVIDER_ID" --format json 2>/dev/null | jq -c '.attributes // {}')
+  fi
+fi
 
 RDS_POSTGRES_SERVER_ASSUME_ROLE_ARN=$(resolve_assume_role_arn "$IAM_PROVIDER" "$RDS_POSTGRES_SERVER_ASSUME_ROLE_SELECTOR")
 export RDS_POSTGRES_SERVER_ASSUME_ROLE_ARN
