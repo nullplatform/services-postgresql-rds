@@ -15,6 +15,13 @@
 # (values.yaml and/or the workflow) — provider_categories is still declared
 # for forward-compatibility, but this script does not rely on it.
 #
+# The lookup also passes --dimensions (from .service.dimensions in CONTEXT,
+# e.g. cluster:prod) so that if more than one identity-access-control provider
+# is ever registered at the same namespace NRN for different dimensions, np
+# resolves the most-specific match instead of us picking an arbitrary one
+# client-side. Today only one such provider is documented/registered per
+# namespace (no dimensions of its own), so this is a no-op in practice.
+#
 # Resolution precedence (see resolve_assume_role_arn in assume_role_lib):
 #   $RDS_POSTGRES_DB_ASSUME_ROLE_ARN -> IAM provider by selector
 #     -> $RDS_POSTGRES_DB_ASSUME_ROLE_ARN_DEFAULT -> agent credentials
@@ -31,9 +38,16 @@ RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR="${RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR:-rd
 # the identity-access-control provider is registered at namespace level.
 NAMESPACE_NRN=$(echo "${CONTEXT:-}" | jq -r '.service.nrn // .entity_nrn // ""' | sed 's/:application=.*$//')
 
+# Dimensions (if any) as key:value,key:value — lets np resolve the
+# most-specific IAM provider the same way it would for a k8s scope.
+DIMENSIONS=$(echo "${CONTEXT:-}" | jq -r '
+  if (.service.dimensions | type) == "object" and ((.service.dimensions | length) > 0)
+  then [ .service.dimensions | to_entries[] | "\(.key):\(.value)" ] | join(",")
+  else empty end' 2>/dev/null)
+
 IAM_PROVIDER="{}"
 if [ -n "$NAMESPACE_NRN" ]; then
-  NP_PROVIDERS=$(np provider list --nrn "$NAMESPACE_NRN" --format json --limit 100 2>/dev/null)
+  NP_PROVIDERS=$(np provider list --nrn "$NAMESPACE_NRN" --format json --limit 100 ${DIMENSIONS:+--dimensions "$DIMENSIONS"} 2>/dev/null)
   IAM_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
     | jq -r '[(.results // [])[] | select((.data_source.stored_keys // []) | contains(["iam_role_arns.arns"]))] | first | .id // ""')
   if [ -n "$IAM_PROVIDER_ID" ] && [ "$IAM_PROVIDER_ID" != "null" ]; then
@@ -41,7 +55,11 @@ if [ -n "$NAMESPACE_NRN" ]; then
   fi
 fi
 
-RDS_POSTGRES_DB_ASSUME_ROLE_ARN=$(resolve_assume_role_arn "$IAM_PROVIDER" "$RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR")
+RDS_POSTGRES_DB_ASSUME_ROLE_ARN=$(resolve_assume_role_arn \
+  "$IAM_PROVIDER" \
+  "$RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR" \
+  "RDS_POSTGRES_DB_ASSUME_ROLE_ARN" \
+  "RDS_POSTGRES_DB_ASSUME_ROLE_ARN_DEFAULT")
 export RDS_POSTGRES_DB_ASSUME_ROLE_ARN
 
 # scripts/aws/assume_role performs sts:AssumeRole and exports AWS_* when an ARN is set,
@@ -53,7 +71,7 @@ if ! source "$SCRIPT_DIR/assume_role"; then
   echo "💡 Possible causes:" >&2
   echo "   • The agent's role is not allowed to sts:AssumeRole the target role" >&2
   echo "   • The target role does not exist or does not trust the agent role" >&2
-  echo "   • There is no role ARN configured for selector=$RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR" >&2
+  echo "   • There is no role ARN configured for selector=$RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR at NRN=$NAMESPACE_NRN${DIMENSIONS:+ dimensions=$DIMENSIONS}" >&2
   echo "" >&2
   exit 1
 fi

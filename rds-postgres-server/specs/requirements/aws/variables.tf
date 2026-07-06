@@ -1,5 +1,5 @@
 variable "cluster_name" {
-  description = "Name of the cluster this bootstrap run is for. Used to derive the permissions role name, the policy name, and the default agent role ARN."
+  description = "Name of the cluster this bootstrap run is for. Used to derive the permissions role name, the policy names, and the default agent role ARN. Must be unique per AWS account (IAM policy names are account-global). Example: \"prod-us-east-1\"."
   type        = string
 }
 
@@ -26,13 +26,19 @@ variable "additional_agent_role_arns" {
 }
 
 variable "role_name" {
-  description = "Override for the permissions IAM role name. Defaults to nullplatform-{cluster_name}-rds-postgres-db-role."
+  description = "Override for the permissions IAM role name. Defaults to nullplatform-{cluster_name}-rds-postgres-server-role."
+  type        = string
+  default     = ""
+}
+
+variable "policies_name_prefix" {
+  description = "Override for the IAM policy name prefix. Defaults to nullplatform-{cluster_name}."
   type        = string
   default     = ""
 }
 
 variable "iam_create_role" {
-  description = "Whether to create the permissions role and its policy. When false, the module produces no resources."
+  description = "Whether to create the permissions role and its policies. When false, the module produces no resources."
   type        = bool
   default     = true
 }

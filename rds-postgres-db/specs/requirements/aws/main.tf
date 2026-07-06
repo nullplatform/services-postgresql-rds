@@ -27,7 +27,7 @@ resource "aws_iam_role" "nullplatform_rds_postgres_db" {
 resource "aws_iam_policy" "nullplatform_rds_postgres_db_secretsmanager_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-postgres-db-secretsmanager-policy"
+  name        = "${local.policies_name_prefix}-rds-postgres-db-secretsmanager-policy"
   description = "Policy for reading the RDS master password from Secrets Manager"
 
   policy = jsonencode({
@@ -57,7 +57,7 @@ resource "aws_iam_role_policy_attachment" "rds_postgres_db_secretsmanager" {
 resource "aws_iam_policy" "nullplatform_rds_postgres_db_s3_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-postgres-db-s3-policy"
+  name        = "${local.policies_name_prefix}-rds-postgres-db-s3-policy"
   description = "Policy for managing per-service S3 tfstate buckets (np-service-*)"
 
   policy = jsonencode({

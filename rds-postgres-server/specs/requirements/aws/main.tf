@@ -56,7 +56,7 @@ resource "aws_iam_role_policy_attachment" "rds_s3" {
 resource "aws_iam_policy" "nullplatform_rds_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-policy"
+  name        = "${local.policies_name_prefix}-rds-policy"
   description = "Policy for managing RDS instances and subnet groups"
 
   policy = jsonencode({
@@ -97,7 +97,7 @@ resource "aws_iam_policy" "nullplatform_rds_policy" {
 resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-sg-policy"
+  name        = "${local.policies_name_prefix}-rds-sg-policy"
   description = "Policy for managing EC2 security groups for RDS"
 
   policy = jsonencode({
@@ -134,7 +134,7 @@ resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
 resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-s3-policy"
+  name        = "${local.policies_name_prefix}-rds-s3-policy"
   description = "Policy for managing per-service S3 tfstate buckets (np-service-*)"
 
   policy = jsonencode({
@@ -171,7 +171,7 @@ resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
 resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
   count = local.iam_create ? 1 : 0
 
-  name        = "nullplatform-${var.cluster_name}-rds-secretsmanager-policy"
+  name        = "${local.policies_name_prefix}-rds-secretsmanager-policy"
   description = "Policy for managing Secrets Manager secrets for RDS master password"
 
   policy = jsonencode({

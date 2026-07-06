@@ -121,9 +121,11 @@ The `requirements/` Terraform module creates a dedicated IAM role
 (`nullplatform-<cluster_name>-rds-postgres-db-role`) holding these policies,
 with a trust policy allowing the nullplatform agent role to `sts:AssumeRole`
 on it. Pass `cluster_name` (required) and optionally `agent_role_arn`
-(defaults to `nullplatform-<cluster_name>-agent-role`) when applying it.
-Granting the agent itself permission to assume this role is handled
-separately, outside this module.
+(defaults to `nullplatform-<cluster_name>-agent-role`), `role_name` (defaults
+to `nullplatform-<cluster_name>-rds-postgres-db-role`) and
+`policies_name_prefix` (defaults to `nullplatform-<cluster_name>`) when
+applying it. Granting the agent itself permission to assume this role is
+handled separately, outside this module.
 
 This role and its policy are shared per **cluster**, not per linked
 `rds-postgres-server` instance — the `GetSecretValue` grant is scoped to the
@@ -143,7 +145,7 @@ Three separate pieces must all be in place for the agent to actually assume
    `agent_role_arn`) — creates the role and its trust policy (see above):
    ```hcl
    module "service_requirements_rds_postgres_db" {
-     source = "git::https://github.com/nullplatform/services.git//databases/rds-postgres-db/requirements?ref=<tag>"
+     source = "git::https://github.com/nullplatform/services.git//databases/rds-postgres-db/specs/requirements/aws?ref=<tag>"
 
      cluster_name = "<cluster-name>"
      # agent_role_arn = ""  # optional override; defaults to
@@ -184,6 +186,15 @@ Three separate pieces must all be in place for the agent to actually assume
 confirmed live: this platform's agent never populates `CONTEXT.providers`
 regardless of the `provider_categories` declared in `values.yaml` or the
 workflow YAMLs, so the lookup goes through the `np` CLI directly instead.
+
+The lookup also passes `--dimensions` (derived from `.service.dimensions` in
+`CONTEXT`, e.g. `cluster:prod`) so that if more than one
+`identity-access-control` provider is ever registered at the same namespace
+NRN for different dimensions, `np` resolves the most-specific match instead
+of an arbitrary one being picked client-side. Today the setup above
+registers a single, dimension-less provider per namespace, so this is a
+no-op — it only matters if per-dimension AssumeRole roles are introduced
+later.
 
 **If any of the 3 steps is missing**, `assume_role_step` logs
 `assume_role=skipped (using agent credentials)` and the workflow proceeds
