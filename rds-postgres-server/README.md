@@ -94,6 +94,9 @@ Exposed in the nullplatform UI when creating or updating the service:
 
 ### nullplatform Prerequisites
 
+- The service itself must be registered on the nullplatform account first — see
+  [`specs/install/README.md`](specs/install/README.md) for the Terraform that
+  registers the service specification and agent association.
 - An active nullplatform account with the following providers configured for the target namespace/dimensions:
   - **`aws-configuration`** (from `tofu-modules//nullplatform/cloud/aws/cloud`) — exposes `account.region`. `build_context` resolves this via `np provider list --nrn <account-level NRN>` filtered by `stored_keys` containing `account.region`.
   - **`aws-networking-configuration`** (from `tofu-modules//nullplatform/cloud/aws/vpc`) — exposes `vpc.id`, `vpc.subnets`, `vpc.security_groups`. Same lookup mechanism, filtered by `vpc.id`.

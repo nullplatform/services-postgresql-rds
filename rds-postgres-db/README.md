@@ -101,6 +101,9 @@ This ensures usernames are stable and reproducible even if the service is recrea
 
 ### nullplatform Prerequisites
 
+- The service itself must be registered on the nullplatform account first — see
+  [`specs/install/README.md`](specs/install/README.md) for the Terraform that
+  registers the service specification and agent association.
 - An active **`rds-postgres-server`** service in the same nullplatform namespace with:
   - `status: active`
   - Matching dimensions (e.g., both services must have `cluster: prod`)

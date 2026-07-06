@@ -1,0 +1,10 @@
+nrn        = "" # namespace-level NRN, e.g. organization=<org>:account=<account>:namespace=<namespace>
+np_api_key = ""
+
+tags_selectors = {
+  "environment" = ""
+}
+
+# repository_org    = "nullplatform"
+# repository_name   = "services"
+# repository_branch = "main"
