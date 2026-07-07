@@ -1,18 +1,20 @@
-<h2 align="center">
-    <a href="https://httpie.io" target="blank_">
-        <img height="100" alt="nullplatform" src="https://nullplatform.com/favicon/android-chrome-192x192.png" />
-    </a>
-    <br>
-    <br>
-    Nullplatform "Any Technology" Template
-    <br>
-</h2>
+# services-postgresql-rds
 
-This is a minimalistic sample on how you can create an application on arbitrary technology.
-In particular, we're spinning up an image that contains an echo server.
-You can check *Echo Server* documentation [here](https://ealenn.github.io/Echo-Server/).
+nullplatform service definitions for AWS RDS PostgreSQL:
 
-## How do I modify this template to build my own application?
+- [`rds-postgres-server/`](rds-postgres-server/README.md) — provisions the RDS
+  PostgreSQL instance itself.
+- [`rds-postgres-db/`](rds-postgres-db/README.md) — provisions a database +
+  application user on an existing `rds-postgres-server` instance, linked via
+  the `connect` link.
 
-1. Change the Dockerfile to run the application / binary that you are building
-2. Deploy your application in nullplatform
+Each service directory is self-contained: `entrypoint/`, `workflows/`,
+`scripts/`, and `specs/` are read directly by the nullplatform agent at
+runtime. `specs/requirements/aws/` and `specs/install/aws/` are one-time
+setup Terraform, applied out-of-band by an account operator — see each
+service's own README for the full setup guide ("AssumeRole Setup Guide") and
+`specs/install/README.md`.
+
+This repository was extracted from `nullplatform/services` (the
+`databases/rds-postgres-server` and `databases/rds-postgres-db` directories),
+preserving their commit history.

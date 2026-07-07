@@ -1,0 +1,50 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# reassign_owned — Before dropping the app role (service delete), transfers
+# ownership of all objects owned by the app user to the master user.
+#
+# PostgreSQL refuses to DROP ROLE when the role still owns objects (tables,
+# sequences, etc. created by app migrations). REASSIGN OWNED transfers
+# ownership to master so the role can be dropped cleanly.
+#
+# Requires: SERVER_HOSTNAME, SERVER_PORT, SERVER_MASTER_SECRET_ARN,
+#           DB_NAME, DB_USERNAME (all exported by build_context)
+# ---------------------------------------------------------------------------
+
+if [ -z "${DB_NAME:-}" ] || [ -z "${DB_USERNAME:-}" ]; then
+  echo "DB_NAME or DB_USERNAME not set — skipping ownership reassignment."
+  exit 0
+fi
+
+echo "Reassigning objects owned by ${DB_USERNAME} in database ${DB_NAME}..."
+
+MASTER_CREDS=$(aws secretsmanager get-secret-value \
+  --secret-id "$SERVER_MASTER_SECRET_ARN" \
+  --query 'SecretString' \
+  --output text)
+
+MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
+MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
+DB_HOST="$SERVER_HOSTNAME"
+DB_PORT="${SERVER_PORT:-5432}"
+
+# Ensure psql is available. Agent pod runs Alpine Linux — use apk.
+if ! command -v psql &>/dev/null; then
+  echo "psql not found, installing postgresql-client via apk..."
+  apk add --no-cache postgresql-client -q
+fi
+
+PGPASSWORD="$MASTER_PASS" psql \
+  -h "$DB_HOST" \
+  -p "$DB_PORT" \
+  -U "$MASTER_USER" \
+  -d "$DB_NAME" \
+  -v ON_ERROR_STOP=on \
+  -c "GRANT \"${DB_USERNAME}\" TO \"${MASTER_USER}\";" \
+  -c "REASSIGN OWNED BY \"${DB_USERNAME}\" TO \"${MASTER_USER}\";" \
+  -c "DROP OWNED BY \"${DB_USERNAME}\";" \
+  -c "REVOKE \"${DB_USERNAME}\" FROM \"${MASTER_USER}\";"
+
+echo "Ownership reassignment complete."

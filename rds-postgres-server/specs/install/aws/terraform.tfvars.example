@@ -1,0 +1,29 @@
+nrn        = "" # namespace-level NRN, e.g. organization=<org>:account=<account>:namespace=<namespace>
+np_api_key = ""
+
+tags_selectors = {
+  "environment" = ""
+}
+
+# repository_org    = "nullplatform"
+# repository_name   = "services-postgresql-rds"
+# repository_branch = "main"
+
+# --- account-level providers (account.region + vpc.id) -----------------------
+# Set create_account_providers = false if another stack in this account
+# already registers aws-configuration/aws-networking-configuration.
+create_account_providers = true
+domain_name               = ""
+hosted_private_zone_id    = ""
+vpc_id                    = ""
+vpc_subnets               = ["", ""]
+vpc_security_groups       = [""]
+
+# --- account-level provider (AssumeRole target) -------------------------------
+# rds_postgres_server_role_arn: output of ../../requirements/aws (apply that
+# module first). rds_postgres_db_role_arn: only set if rds-postgres-db is also
+# installed in this account — leave "" otherwise. See main.tf for why
+# rds-postgres-db should NOT register its own aws-iam-configuration provider.
+create_identity_access_control = true
+rds_postgres_server_role_arn   = ""
+# rds_postgres_db_role_arn     = ""

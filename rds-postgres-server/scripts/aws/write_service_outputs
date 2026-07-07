@@ -1,0 +1,50 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# write_service_outputs — Reads Terraform outputs from the deployment module
+# and writes them to the NP service attributes via the API.
+#
+# Fields with "export: true" in the service spec (hostname, port) become
+# env vars in apps when a link is activated.
+# Fields with "export: false" (db_instance_identifier, master_secret_arn) are
+# stored internally and used by build_permissions_context during link actions.
+# ---------------------------------------------------------------------------
+
+cd "$OUTPUT_DIR"
+
+SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+
+echo "Reading Terraform outputs for service $SERVICE_ID..."
+
+HOSTNAME=$(tofu output -raw hostname 2>/dev/null || echo "")
+PORT=$(tofu output -raw port 2>/dev/null || echo "")
+DB_INSTANCE_IDENTIFIER=$(tofu output -raw db_instance_identifier 2>/dev/null || echo "")
+MASTER_SECRET_ARN=$(tofu output -raw master_secret_arn 2>/dev/null || echo "")
+
+if [ -z "$HOSTNAME" ]; then
+  echo "WARNING: No hostname output found. Skipping attribute update."
+  exit 0
+fi
+
+ATTRS=$(jq -n \
+  --arg hostname              "$HOSTNAME" \
+  --arg port                  "$PORT" \
+  --arg db_instance_id        "$DB_INSTANCE_IDENTIFIER" \
+  --arg master_secret_arn     "${MASTER_SECRET_ARN:-}" \
+  '{
+    hostname:              $hostname,
+    port:                  ($port | tonumber),
+    db_instance_identifier: $db_instance_id
+  } + (if $master_secret_arn != "" then {master_secret_arn: $master_secret_arn} else {} end)')
+
+echo "Updating service $SERVICE_ID attributes:"
+echo "  hostname:              $HOSTNAME"
+echo "  port:                  $PORT"
+echo "  db_instance_identifier: $DB_INSTANCE_IDENTIFIER"
+
+np service patch --id "$SERVICE_ID" --body "{\"attributes\": $ATTRS}"
+echo "Service attributes updated successfully."
+
+#np service patch --id "$SERVICE_ID" --body '{"linkable_to": []}'
+#echo "Service linkable_to set to []."

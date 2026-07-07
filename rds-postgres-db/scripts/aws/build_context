@@ -1,0 +1,89 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# build_context — Prepares the execution environment for rds-postgres-db
+# service and link actions.
+#
+# All actions: creates/verifies the per-service S3 tfstate bucket and reads
+#   the service's stored attributes (hostname, port, master_secret_arn,
+#   database_name, username) into environment variables.
+#
+# Link/unlink: additionally exports link-specific variables (LINK_ID,
+#   LINK_ACCESS_LEVEL, etc.). For unlink, checks if the service was ever
+#   created; if not, sets LINK_NEVER_CREATED=true and exits cleanly.
+# ---------------------------------------------------------------------------
+
+SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
+
+# --- Read static config from values.yaml ------------------------------------
+
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
+
+if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
+  export AWS_PROFILE="${AWS_PROFILE_VAL}"
+fi
+
+# --- Ensure per-service S3 bucket exists (used for all tfstate files) -------
+
+TFSTATE_BUCKET="np-service-${SERVICE_ID}"
+
+if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
+  echo "Creating tfstate bucket: ${TFSTATE_BUCKET}"
+  if [ "$REGION" = "us-east-1" ]; then
+    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
+  else
+    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" \
+      --create-bucket-configuration LocationConstraint="$REGION"
+  fi
+  aws s3api put-bucket-versioning --bucket "$TFSTATE_BUCKET" \
+    --versioning-configuration Status=Enabled
+  echo "Bucket ${TFSTATE_BUCKET} created with versioning enabled."
+else
+  echo "Using existing tfstate bucket: ${TFSTATE_BUCKET}"
+fi
+
+export TFSTATE_BUCKET
+
+export OUTPUT_DIR="/tmp/np-service-${SERVICE_ID}"
+mkdir -p "$OUTPUT_DIR"
+
+# --- Read stored service attributes (available after service create) --------
+
+echo "Reading service ${SERVICE_ID} attributes..."
+SERVICE_JSON=$(np service read --id "$SERVICE_ID" --format json)
+
+export SERVER_HOSTNAME=$(echo "$SERVICE_JSON"          | jq -r '.attributes.hostname          // ""')
+export SERVER_PORT=$(echo "$SERVICE_JSON"              | jq -r '.attributes.port              // "5432"')
+export SERVER_MASTER_SECRET_ARN=$(echo "$SERVICE_JSON" | jq -r '.attributes.master_secret_arn // ""')
+export DB_NAME=$(echo "$SERVICE_JSON"                  | jq -r '.attributes.database_name     // ""')
+export DB_USERNAME=$(echo "$SERVICE_JSON"              | jq -r '.attributes.username          // ""')
+
+# --- Link context (link/unlink workflows only) ------------------------------
+
+if [ "${ACTION_SOURCE:-}" = "link" ]; then
+  export LINK_ID=$(echo "$CONTEXT"   | jq -r '.link.id       // ""')
+  export LINK_NAME=$(echo "$CONTEXT" | jq -r '.link.name     // ""')
+  export SCOPE_ID=$(echo "$CONTEXT"  | jq -r '.link.scope.id // ""')
+  export SCOPE_NRN=$(echo "$CONTEXT" | jq -r '.link.scope.nrn // ""')
+
+  LINK_ATTRS=$(echo "$CONTEXT" | jq -r '(.link.attributes // {}) * (.parameters // {})')
+  export LINK_ACCESS_LEVEL=$(echo "$LINK_ATTRS" | jq -r '.access_level // "read-write"')
+
+  ACTION_TYPE=$(echo "$CONTEXT" | jq -r '.type // ""')
+
+  if [ "$ACTION_TYPE" = "delete" ] && [ -z "$SERVER_HOSTNAME" ]; then
+    echo "WARNING: service has no hostname — service was never created successfully. Nothing to destroy."
+    export LINK_NEVER_CREATED=true
+    exit 0
+  fi
+  export LINK_NEVER_CREATED=false
+fi

@@ -1,0 +1,45 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# write_link_outputs — Reads Terraform outputs from the permissions module
+# and writes them to the NP link attributes via the API.
+#
+# Fields with "export: true" (username, database_name) become plain env vars.
+# Fields with "export: {secret: true}" (password) become secret env vars
+# (value is stored encrypted and hidden in API responses, but injected
+# into the app at runtime).
+# ---------------------------------------------------------------------------
+
+cd "$OUTPUT_DIR"
+
+LINK_ID_VAL=$(echo "$CONTEXT" | jq -r '.link.id')
+
+echo "Reading Terraform outputs for link $LINK_ID_VAL..."
+
+DB_USERNAME=$(tofu output -raw db_username 2>/dev/null || echo "")
+DB_PASSWORD=$(tofu output -raw db_password 2>/dev/null || echo "")
+DATABASE_NAME=$(tofu output -raw database_name 2>/dev/null || echo "")
+
+if [ -z "$DB_USERNAME" ]; then
+  echo "WARNING: No db_username output found. Skipping link attribute update."
+  exit 0
+fi
+
+ATTRS=$(jq -n \
+  --arg username      "$DB_USERNAME" \
+  --arg password      "$DB_PASSWORD" \
+  --arg database_name "$DATABASE_NAME" \
+  '{
+    username:      $username,
+    password:      $password,
+    database_name: $database_name
+  }')
+
+echo "Updating link $LINK_ID_VAL attributes:"
+echo "  username:      $DB_USERNAME"
+echo "  database_name: $DATABASE_NAME"
+echo "  password:      ****"
+
+np link patch --id "$LINK_ID_VAL" --body "{\"attributes\": $ATTRS}"
+echo "Link attributes updated successfully."

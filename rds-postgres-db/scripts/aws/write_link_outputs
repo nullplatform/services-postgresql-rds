@@ -1,0 +1,58 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# write_link_outputs — Reads credentials from the service attributes and
+# copies them to the NP link attributes via the API.
+#
+# Credentials (hostname, port, username, password, database_name) live at
+# service level. This script mirrors them to the link so that Nullplatform
+# can inject them as environment variables into the application.
+#
+# hostname, port, username, database_name (export: true) become plain env vars.
+# password (export: {secret: true}) becomes a secret env var.
+# ---------------------------------------------------------------------------
+
+LINK_ID_VAL=$(echo "$CONTEXT" | jq -r '.link.id')
+SERVICE_ID=$(echo "$CONTEXT"  | jq -r '.service.id')
+
+echo "Reading service ${SERVICE_ID} credentials for link ${LINK_ID_VAL}..."
+SERVICE_JSON=$(np service read --id "$SERVICE_ID" --format json)
+
+HOSTNAME=$(echo "$SERVICE_JSON"         | jq -r '.attributes.hostname          // ""')
+PORT=$(echo "$SERVICE_JSON"             | jq -r '.attributes.port              // "5432" | tostring')
+USERNAME=$(echo "$SERVICE_JSON"         | jq -r '.attributes.username          // ""')
+PASSWORD=$(echo "$SERVICE_JSON"         | jq -r '.attributes.password          // ""')
+DATABASE_NAME=$(echo "$SERVICE_JSON"    | jq -r '.attributes.database_name     // ""')
+MASTER_SECRET_ARN=$(echo "$SERVICE_JSON"| jq -r '.attributes.master_secret_arn // ""')
+
+if [ -z "$USERNAME" ]; then
+  echo "WARNING: No username found in service attributes. Skipping link attribute update."
+  exit 0
+fi
+
+ATTRS=$(jq -n \
+  --arg hostname          "$HOSTNAME" \
+  --arg port              "$PORT" \
+  --arg username          "$USERNAME" \
+  --arg password          "$PASSWORD" \
+  --arg database_name     "$DATABASE_NAME" \
+  --arg master_secret_arn "$MASTER_SECRET_ARN" \
+  '{
+    hostname:          $hostname,
+    port:              ($port | tonumber),
+    username:          $username,
+    password:          $password,
+    database_name:     $database_name,
+    master_secret_arn: $master_secret_arn
+  }')
+
+echo "Updating link ${LINK_ID_VAL} attributes:"
+echo "  hostname:      $HOSTNAME"
+echo "  port:          $PORT"
+echo "  username:      $USERNAME"
+echo "  database_name: $DATABASE_NAME"
+echo "  password:      ****"
+
+np link patch --id "$LINK_ID_VAL" --body "{\"attributes\": $ATTRS}"
+echo "Link attributes updated successfully."

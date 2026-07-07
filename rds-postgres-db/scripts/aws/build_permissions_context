@@ -1,0 +1,83 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# build_permissions_context — Prepares the Terraform execution environment
+# for link/unlink actions. Runs AFTER build_context, which has exported:
+#   $CONTEXT, $VALUES, $SERVICE_PATH, $LINK_ID, $LINK_ACCESS_LEVEL,
+#   $TFSTATE_BUCKET, $SERVER_HOSTNAME, $SERVER_PORT, $SERVER_MASTER_SECRET_ARN,
+#   $DB_NAME, $DB_USERNAME
+#
+# DB name and username come from service attributes (set during service create),
+# not derived from application_id. Master credentials are retrieved from
+# Secrets Manager for the PostgreSQL provider.
+# ---------------------------------------------------------------------------
+
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+AWS_PROFILE_VAL=$(yaml_value "aws_profile" "" "$VALUES")
+
+if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
+  export AWS_PROFILE="${AWS_PROFILE_VAL}"
+fi
+
+if [ "${LINK_NEVER_CREATED:-}" = "true" ]; then
+  echo "Link was never created successfully — skipping permissions context setup."
+  exit 0
+fi
+
+DB_HOST="${SERVER_HOSTNAME:-}"
+DB_PORT="${SERVER_PORT:-5432}"
+MASTER_SECRET_ARN="${SERVER_MASTER_SECRET_ARN:-}"
+
+if [ -z "$DB_HOST" ]; then
+  echo "ERROR: SERVER_HOSTNAME not set. Did build_context run successfully?" >&2
+  exit 1
+fi
+
+if [ -z "$MASTER_SECRET_ARN" ]; then
+  echo "ERROR: SERVER_MASTER_SECRET_ARN not set. Did build_context run successfully?" >&2
+  exit 1
+fi
+
+if [ -z "${DB_NAME:-}" ] || [ -z "${DB_USERNAME:-}" ]; then
+  echo "ERROR: DB_NAME or DB_USERNAME not set. Has the service been created successfully?" >&2
+  exit 1
+fi
+
+echo "Database: ${DB_NAME}, Username: ${DB_USERNAME}"
+
+# --- Retrieve master credentials from Secrets Manager ----------------------
+
+echo "Retrieving master credentials from Secrets Manager..."
+MASTER_CREDS=$(aws secretsmanager get-secret-value \
+  --secret-id "$MASTER_SECRET_ARN" \
+  --query 'SecretString' \
+  --output text)
+
+MASTER_USER=$(echo "$MASTER_CREDS" | jq -r '.username')
+MASTER_PASS=$(echo "$MASTER_CREDS" | jq -r '.password')
+
+# --- Prepare link-specific working directory --------------------------------
+
+export OUTPUT_DIR="/tmp/np-link-${LINK_ID}"
+mkdir -p "$OUTPUT_DIR"
+
+# Write sensitive master password to auto.tfvars to keep it out of the process list.
+cat > "$OUTPUT_DIR/sensitive.auto.tfvars" <<EOF
+master_password = "${MASTER_PASS}"
+EOF
+
+# --- Set Terraform execution variables -------------------------------------
+
+export TOFU_MODULE_DIR="$SERVICE_PATH/permissions"
+
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
+
+export TOFU_VARIABLES="-var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME} -var=db_username=${DB_USERNAME} -var=master_username=${MASTER_USER} -var=access_level=${LINK_ACCESS_LEVEL:-read-write}"
