@@ -1,0 +1,9 @@
+# Trivy misconfiguration suppressions for this repo.
+# Each entry is intentional and documented; revisit if the module changes.
+
+# AVD-AWS-0104 — RDS security group allows unrestricted egress (0.0.0.0/0).
+# Standard for an RDS instance's own security group (matches the AWS default
+# VPC SG behavior): the instance needs outbound access for things like CA
+# bundle/extension fetches and Secrets Manager rotation. Inbound is already
+# restricted to PostgreSQL (5432) from the VPC's own CIDR blocks.
+AVD-AWS-0104
