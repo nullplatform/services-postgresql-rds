@@ -10,6 +10,16 @@ AssumeRole IAM role/policies the *agent* needs to operate the service — see
 that module's README and the "AssumeRole Setup Guide" in the top-level
 [`README.md`](../../README.md) for that half of the setup.
 
+Unlike `rds-postgres-server`'s install, this one does **not** register the
+`aws-iam-configuration` provider (the AssumeRole target). That provider is
+account-scoped and only additive-by-recreation — a second, independent
+registration at the same account NRN would make
+`scripts/aws/assume_role_step`'s lookup nondeterministic between the two.
+Instead, pass this service's permissions role ARN (the `permissions_role_arn`
+output of `../requirements/aws`) as `rds_postgres_db_role_arn` to
+[`rds-postgres-server`'s install](../../rds-postgres-server/specs/install/README.md),
+which folds both selectors into a single provider.
+
 ## Layout
 
 ```
@@ -25,7 +35,7 @@ install/
 ## Using the example
 
 ```bash
-cp -r databases/rds-postgres-db/specs/install/aws /path/to/your/infra/rds-postgres-db
+cp -r rds-postgres-db/specs/install/aws /path/to/your/infra/rds-postgres-db
 cd /path/to/your/infra/rds-postgres-db
 cp terraform.tfvars.example terraform.tfvars
 $EDITOR terraform.tfvars

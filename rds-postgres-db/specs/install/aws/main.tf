@@ -9,7 +9,7 @@
 ################################################################################
 
 locals {
-  service_path      = "databases/rds-postgres-db"
+  service_path      = "rds-postgres-db"
   available_links   = ["connect"]
   available_actions = []
 }

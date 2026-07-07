@@ -1,0 +1,34 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        run: |
+          scripts=$(grep -rlE '^#!.*\b(bash|sh)\b' --exclude-dir=.git .)
+          if [ -n "$scripts" ]; then
+            echo "$scripts" | xargs shellcheck --severity=error
+          else
+            echo "No shell scripts found"
+          fi
+
+  terraform-fmt:
+    name: Terraform Format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: v1.10.5
+      - name: Check formatting
+        run: tofu fmt -check -recursive

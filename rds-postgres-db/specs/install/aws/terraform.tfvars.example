@@ -6,5 +6,5 @@ tags_selectors = {
 }
 
 # repository_org    = "nullplatform"
-# repository_name   = "services"
+# repository_name   = "services-postgresql-rds"
 # repository_branch = "main"

@@ -109,7 +109,7 @@ This ensures usernames are stable and reproducible even if the service is recrea
   - Matching dimensions (e.g., both services must have `cluster: prod`)
   - Attributes `hostname` and `master_secret_arn` already set (i.e., RDS instance successfully provisioned)
 - The `rds-postgres-server` must expose a Secrets Manager secret with master PostgreSQL credentials
-- For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **namespace-level NRN**. Unlike `rds-postgres-server`, this service does not need `aws-configuration`/`aws-networking-configuration` providers — `build_context` reads `region` from `values.yaml` (default `us-east-1`), not from a nullplatform provider.
+- For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **account-level NRN** (or any ascendant of the service's NRN — resolution walks up the hierarchy). Unlike `rds-postgres-server`, this service does not need `aws-configuration`/`aws-networking-configuration` providers — `build_context` reads `region` from `values.yaml` (default `us-east-1`), not from a nullplatform provider.
 
 ### AWS IAM Permissions
 
@@ -148,7 +148,7 @@ Three separate pieces must all be in place for the agent to actually assume
    `agent_role_arn`) — creates the role and its trust policy (see above):
    ```hcl
    module "service_requirements_rds_postgres_db" {
-     source = "git::https://github.com/nullplatform/services.git//databases/rds-postgres-db/specs/requirements/aws?ref=<tag>"
+     source = "git::https://github.com/nullplatform/services-postgresql-rds.git//rds-postgres-db/specs/requirements/aws?ref=<tag>"
 
      cluster_name = "<cluster-name>"
      # agent_role_arn = ""  # optional override; defaults to
@@ -168,34 +168,48 @@ Three separate pieces must all be in place for the agent to actually assume
    }
    ```
 3. **Register the role as an `identity-access-control` provider** in
-   nullplatform, at the **namespace-level NRN**
-   (`organization=...:account=...:namespace=...` — without `:application=...`),
-   with selector `rds-postgres-db`:
+   nullplatform, at the **account-level NRN**
+   (`organization=...:account=...` — no `:namespace=...`), with selector
+   `rds-postgres-db`. If `rds-postgres-server` is also installed in this
+   account, fold both selectors into the **same** provider instead of
+   registering a second one at the same NRN (see the comment in
+   `rds-postgres-server`'s `specs/install/aws/main.tf` for why a second,
+   independent registration breaks `assume_role_step`'s lookup):
    ```hcl
    module "identity_access_control" {
      source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/identity-access-control?ref=<tag>"
-     nrn    = "organization=<org>:account=<account>:namespace=<namespace>"
+     nrn    = "organization=<org>:account=<account>"
      attributes = {
        iam_role_arns = {
-         arns = [{ selector = "rds-postgres-db", arn = "<role ARN from step 1>" }]
+         arns = [
+           { selector = "rds-postgres-db", arn = "<role ARN from step 1>" },
+           # { selector = "rds-postgres-server", arn = "<rds-postgres-server's role ARN>" },
+         ]
        }
      }
    }
    ```
 
 `scripts/aws/assume_role_step` resolves the role by querying
-`np provider list` / `np provider read` for this provider at the service's
-**namespace NRN** — not by reading `CONTEXT.providers[...]`. This was
-confirmed live: this platform's agent never populates `CONTEXT.providers`
+`np provider list --categories identity-access-control` with the service's
+**full NRN as-is** (not stripped) — not by reading `CONTEXT.providers[...]`.
+`--categories` resolves up the NRN hierarchy, so it finds the provider
+registered at the account level above regardless of how deep the service's
+own NRN is. This was confirmed live: an earlier version of this script
+stripped the NRN to namespace level and did a plain `np provider list`
+filtered by `stored_keys`, which does **not** inherit providers from
+ascendant NRN levels — the account-level provider was never found and the
+step silently fell back to agent credentials. Separately, `CONTEXT.providers[...]`
+itself was also confirmed live to never populate on this platform version
 regardless of the `provider_categories` declared in `values.yaml` or the
-workflow YAMLs, so the lookup goes through the `np` CLI directly instead.
+workflow YAMLs, so the lookup goes through the `np` CLI directly either way.
 
 The lookup also passes `--dimensions` (derived from `.service.dimensions` in
 `CONTEXT`, e.g. `cluster:prod`) so that if more than one
-`identity-access-control` provider is ever registered at the same namespace
-NRN for different dimensions, `np` resolves the most-specific match instead
+`identity-access-control` provider is ever registered at the same NRN
+for different dimensions, `np` resolves the most-specific match instead
 of an arbitrary one being picked client-side. Today the setup above
-registers a single, dimension-less provider per namespace, so this is a
+registers a single, dimension-less provider per account, so this is a
 no-op — it only matters if per-dimension AssumeRole roles are introduced
 later.
 

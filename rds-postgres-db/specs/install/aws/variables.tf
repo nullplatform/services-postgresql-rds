@@ -29,7 +29,7 @@ variable "repository_org" {
 variable "repository_name" {
   description = "Repository name containing the rds-postgres-db service spec templates."
   type        = string
-  default     = "services"
+  default     = "services-postgresql-rds"
 }
 
 variable "repository_branch" {
@@ -39,7 +39,7 @@ variable "repository_branch" {
 }
 
 variable "repository_token" {
-  description = "Access token for private repositories. Unnecessary for the public nullplatform/services repository."
+  description = "Access token for private repositories. Unnecessary for a public repository."
   type        = string
   default     = null
   sensitive   = true

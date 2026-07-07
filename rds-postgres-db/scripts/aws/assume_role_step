@@ -7,9 +7,10 @@
 # output:environment so the engine propagates them to the following steps.
 #
 # The AWS IAM provider (type "aws-iam-configuration", stored key
-# "iam_role_arns.arns") is looked up directly via the np CLI, at the service's
-# namespace NRN, the same way build_context already looks up the
-# account.region/vpc.id providers. CONTEXT.providers[...] is NOT used here:
+# "iam_role_arns.arns") is looked up directly via the np CLI, using the
+# service's full NRN (resolution walks up the hierarchy to the account level,
+# where this provider is actually registered — see below). CONTEXT.providers[...]
+# is NOT used here:
 # a live end-to-end test against a real agent confirmed it is never populated
 # by this platform version regardless of provider_categories declarations
 # (values.yaml and/or the workflow) — provider_categories is still declared
@@ -17,10 +18,10 @@
 #
 # The lookup also passes --dimensions (from .service.dimensions in CONTEXT,
 # e.g. cluster:prod) so that if more than one identity-access-control provider
-# is ever registered at the same namespace NRN for different dimensions, np
+# is ever registered at the same NRN for different dimensions, np
 # resolves the most-specific match instead of us picking an arbitrary one
 # client-side. Today only one such provider is documented/registered per
-# namespace (no dimensions of its own), so this is a no-op in practice.
+# account (no dimensions of its own), so this is a no-op in practice.
 #
 # Resolution precedence (see resolve_assume_role_arn in assume_role_lib):
 #   $RDS_POSTGRES_DB_ASSUME_ROLE_ARN -> IAM provider by selector
