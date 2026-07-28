@@ -10,7 +10,7 @@ nullplatform service definitions for AWS RDS PostgreSQL:
 
 Each service directory is self-contained: `entrypoint/`, `workflows/`,
 `scripts/`, and `specs/` are read directly by the nullplatform agent at
-runtime. `specs/requirements/aws/` and `specs/install/aws/` are one-time
+runtime. `specs/requirements/aws/` and `specs/install/aws/` contain one-time
 setup Terraform, applied out-of-band by an account operator — see each
 service's own README for the full setup guide ("AssumeRole Setup Guide") and
 `specs/install/README.md`.
