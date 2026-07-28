@@ -62,6 +62,27 @@ resource "aws_secretsmanager_secret_version" "master" {
 }
 
 # ---------------------------------------------------------------------------
+# KMS key for RDS storage encryption (customer managed, for parity with the
+# Aurora module — the default AWS-managed RDS key works but isn't ours to
+# control key policy/rotation on)
+# ---------------------------------------------------------------------------
+
+resource "aws_kms_key" "rds" {
+  description         = "Customer managed key for RDS instance storage encryption (${var.instance_name})"
+  enable_key_rotation = true
+
+  tags = {
+    "managed-by" = "nullplatform"
+    "service-id" = var.service_id
+  }
+}
+
+resource "aws_kms_alias" "rds" {
+  name          = "alias/nullplatform-rds-${var.instance_name}"
+  target_key_id = aws_kms_key.rds.key_id
+}
+
+# ---------------------------------------------------------------------------
 # RDS instance
 # ---------------------------------------------------------------------------
 
@@ -83,6 +104,7 @@ resource "aws_db_instance" "main" {
   allocated_storage = var.allocated_storage
   storage_type      = "gp3"
   storage_encrypted = true
+  kms_key_id        = aws_kms_key.rds.arn
 
   db_name  = "postgres"
   username = "master"
