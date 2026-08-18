@@ -28,3 +28,8 @@ output "database_name" {
   value       = postgresql_database.app.name
   description = "Database name"
 }
+
+output "app_secret_arn" {
+  value       = aws_secretsmanager_secret.app.arn
+  description = "ARN of the Secrets Manager secret holding the app-level credentials"
+}

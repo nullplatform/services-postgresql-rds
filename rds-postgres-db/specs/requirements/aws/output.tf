@@ -14,7 +14,7 @@ output "permissions_role_id" {
 }
 
 output "secretsmanager_policy_arn" {
-  description = "ARN of the Secrets Manager read policy"
+  description = "ARN of the Secrets Manager policy (read master secret, manage app credentials secret)"
   value       = local.iam_create ? aws_iam_policy.nullplatform_rds_postgres_db_secretsmanager_policy[0].arn : ""
 }
 

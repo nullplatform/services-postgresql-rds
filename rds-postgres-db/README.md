@@ -1,13 +1,13 @@
 # rds-postgres-db
 
-A nullplatform dependency service that provisions and manages a **PostgreSQL database** within an existing RDS instance managed by [`rds-postgres-server`](../rds-postgres-server). It handles database creation, app-level user management, and per-link fine-grained access control — without creating any AWS infrastructure itself.
+A nullplatform dependency service that provisions and manages a **PostgreSQL database** within an existing RDS instance managed by [`rds-postgres-server`](../rds-postgres-server). It handles database creation, app-level user management, and per-link fine-grained access control. Unlike `rds-postgres-server`, it does not provision any RDS/EC2 infrastructure — the one AWS resource it does create is the Secrets Manager secret holding the app-level PostgreSQL credentials.
 
 ## What It Does
 
 - Auto-discovers a compatible `rds-postgres-server` in the same nullplatform namespace using dimension matching
 - Creates a dedicated PostgreSQL database and application-level user within that server
 - Manages per-link permissions: each link to an application gets its own PostgreSQL user with scoped grants (`read`, `write`, or `read-write`)
-- Stores connection credentials in nullplatform service and link attributes for injection into applications
+- Stores connection credentials in nullplatform service and link attributes for injection into applications, and mirrors the app-level credentials into a Secrets Manager secret (same convention as the `rds-postgres-server` master secret)
 
 ## Architecture
 
@@ -25,7 +25,7 @@ nullplatform Application
              postgresql_grant.*
 ```
 
-Unlike `rds-postgres-server`, this service creates no AWS resources. It only manages PostgreSQL-level objects (databases, roles, grants) on the shared RDS instance.
+Unlike `rds-postgres-server`, this service creates no RDS/EC2 infrastructure — it only manages PostgreSQL-level objects (databases, roles, grants) on the shared RDS instance, plus one Secrets Manager secret for the app-level credentials it generates.
 
 ## Nullplatform Integration
 
@@ -43,7 +43,8 @@ Unlike `rds-postgres-server`, this service creates no AWS resources. It only man
 | `username` | exported | Service-level PostgreSQL user |
 | `password` | hidden | Service-level PostgreSQL password |
 | `database_name` | exported | PostgreSQL database name |
-| `master_secret_arn` | internal | Secrets Manager ARN (used for link operations) |
+| `master_secret_arn` | internal | Secrets Manager ARN for the `rds-postgres-server` master credentials (used for link operations) |
+| `app_secret_arn` | internal | Secrets Manager ARN for this service's own app-level credentials |
 
 ### Link Attributes (written per link)
 
@@ -52,6 +53,7 @@ Unlike `rds-postgres-server`, this service creates no AWS resources. It only man
 | `username` | Per-link PostgreSQL user (`np_<first 16 chars of link_id>`) |
 | `password` | Per-link PostgreSQL password |
 | `database_name` | Database name (same as service-level database) |
+| `app_secret_arn` | Secrets Manager ARN for the service-level app credentials (mirrored from the service attribute) |
 
 ## Link Parameters
 
@@ -73,9 +75,9 @@ All access levels include `DEFAULT PRIVILEGES` so future tables created after th
 
 | Workflow | Trigger | What It Does |
 |---|---|---|
-| `create` | Service created | Auto-discovers server, creates database + app user, writes service attributes |
+| `create` | Service created | Auto-discovers server, creates database + app user, stores app credentials in Secrets Manager, writes service attributes |
 | `update` | Service updated | No-op (no configurable parameters) |
-| `delete` | Service deleted | Reassigns owned objects to master, destroys app user; **database is preserved** |
+| `delete` | Service deleted | Reassigns owned objects to master, destroys app user and its Secrets Manager secret; **database is preserved** |
 | `link` | Application linked | Creates per-link PostgreSQL user with scoped grants |
 | `unlink` | Application unlinked | Revokes grants only; user and database are **preserved** |
 
@@ -97,6 +99,16 @@ username = "np_<first 16 hex chars of link_id>"
 
 This ensures usernames are stable and reproducible even if the service is recreated.
 
+## Infrastructure Resources Created
+
+| Resource | Description |
+|---|---|
+| `postgresql_database` | The application database (preserved on delete) |
+| `postgresql_role` | The service-level app user |
+| `aws_secretsmanager_secret` | Stores the app-level credentials (`nullplatform/rds/<service_id>/app`); destroyed alongside the app user on service delete |
+
+No RDS, EC2, or VPC resources are created — those belong to the auto-discovered `rds-postgres-server`.
+
 ## Requirements
 
 ### nullplatform Prerequisites
@@ -113,9 +125,9 @@ This ensures usernames are stable and reproducible even if the service is recrea
 
 ### AWS IAM Permissions
 
-This service requires minimal AWS permissions compared to `rds-postgres-server`. The agent needs:
+This service requires fewer AWS permissions than `rds-postgres-server` (no RDS/EC2), but it does manage its own Secrets Manager secret. The agent needs:
 
-- **Secrets Manager**: `GetSecretValue` — to retrieve the master PostgreSQL password from the ARN stored in service attributes
+- **Secrets Manager**: `GetSecretValue` — to retrieve the master PostgreSQL password from the ARN stored in service attributes; plus `CreateSecret`, `PutSecretValue`, `UpdateSecret`, `DeleteSecret`, `DescribeSecret`, `TagResource`, `UntagResource`, `GetResourcePolicy`, `ListSecretVersionIds` — to create, update, and delete the app-level credentials secret this service owns
 - **S3**: full lifecycle on the `np-service-<SERVICE_ID>` bucket — `build_context` creates and manages its own per-service Terraform state bucket, same as `rds-postgres-server`
 
 No RDS or EC2 permissions are needed.
@@ -131,12 +143,15 @@ applying it. Granting the agent itself permission to assume this role is
 handled separately, outside this module.
 
 This role and its policy are shared per **cluster**, not per linked
-`rds-postgres-server` instance — the `GetSecretValue` grant is scoped to the
-`nullplatform/rds/*` secret-name prefix (every master secret in the cluster
-following that naming convention), not to the single secret this particular
-service instance's link actually uses. Anything that assumes this role can
-read the master password of any `rds-postgres-server` in the cluster, not
-just the linked one.
+`rds-postgres-server` instance — the Secrets Manager grant is scoped to the
+`nullplatform/rds/*` secret-name prefix (every master and app secret in the
+cluster following that naming convention), not to the single secrets this
+particular service instance actually owns. Anything that assumes this role
+can read, create, update, or delete any secret under that prefix — not just
+the master password of the linked server, and not just this instance's own
+app secret. This is a wider blast radius than a read-only grant would be;
+narrowing it to per-instance secret ARNs would require generating the policy
+per service instance instead of once per cluster.
 
 ### AssumeRole Setup Guide
 

@@ -3,6 +3,12 @@ variable "service_id" {
   description = "Nullplatform service ID (used as keeper to stabilize password across re-applies)"
 }
 
+variable "region" {
+  type        = string
+  default     = "us-east-1"
+  description = "AWS region (used to create the app credentials secret in Secrets Manager)"
+}
+
 variable "db_host" {
   type        = string
   description = "RDS endpoint hostname"

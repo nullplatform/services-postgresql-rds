@@ -64,6 +64,13 @@
           "editableOn": [],
           "description": "ARN of the Secrets Manager secret for master credentials (internal use)",
           "order": 6
+        },
+        "app_secret_arn": {
+          "type": "string",
+          "visibleOn": [],
+          "editableOn": [],
+          "description": "ARN of the Secrets Manager secret holding the app-level credentials (internal use)",
+          "order": 7
         }
       }
     },
