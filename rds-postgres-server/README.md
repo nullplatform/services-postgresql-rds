@@ -65,8 +65,11 @@ Exposed in the nullplatform UI when creating or updating the service:
 | `instance_class` | string | `db.t3.micro` | `db.t3.micro`, `db.t3.small`, `db.t3.medium`, `db.m5.large` | Yes |
 | `allocated_storage` | number | `20` | 20–1000 (GB) | Yes |
 | `postgres_version` | string | `16` | `14`, `15`, `16` | No |
+| `secret_kms_key_id` | string | _(none)_ | Any KMS key ID/ARN in the account | Yes |
 
 > `postgres_version` cannot be changed after creation because PostgreSQL major version upgrades require manual intervention and are not managed by this service.
+
+> `secret_kms_key_id` controls which KMS key encrypts the master password secret in Secrets Manager. If left unset, AWS encrypts it with the default `aws/secretsmanager` managed key — pass a customer-managed key ARN here only if this service instance requires its own key.
 
 ## Workflows
 
