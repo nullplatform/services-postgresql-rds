@@ -48,6 +48,12 @@ resource "aws_iam_role_policy_attachment" "rds_s3" {
   policy_arn = aws_iam_policy.nullplatform_rds_s3_policy[0].arn
 }
 
+resource "aws_iam_role_policy_attachment" "rds_kms" {
+  count      = local.iam_create ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
+  policy_arn = aws_iam_policy.nullplatform_rds_kms_policy[0].arn
+}
+
 ################################################################################
 # RDS IAM policy
 ################################################################################
@@ -192,6 +198,70 @@ resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
           "secretsmanager:ListSecretVersionIds"
         ],
         "Resource" : "*"
+      }
+    ]
+  })
+}
+
+################################################################################
+# KMS IAM policy
+#
+# rds-postgres-server/deployment always creates its own customer-managed KMS
+# key for RDS storage encryption (not optional — required for AVD-AWS-0079
+# compliance) and tags it "managed-by" = "nullplatform". Scoped by that tag
+# (not "Resource" : "*") so this role can create and manage only the CMKs it
+# tags itself — it can never touch, disable, or schedule deletion of any
+# other KMS key in the account. kms:CreateKey can't be scoped to a specific
+# key (it doesn't exist yet), so it's gated on the tag being requested at
+# creation time instead (aws:RequestTag); every other action is gated on the
+# tag already present on the key (aws:ResourceTag).
+################################################################################
+
+# Grant permissions to create and manage the customer-managed KMS key used
+# for RDS storage encryption, scoped to keys this role itself tags
+resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
+  count = local.iam_create ? 1 : 0
+
+  name        = "${local.policies_name_prefix}-rds-kms-policy"
+  description = "Policy for managing the customer-managed KMS key used for RDS storage encryption, scoped to keys tagged managed-by=nullplatform"
+
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "CreateOwnCMK",
+        "Effect" : "Allow",
+        "Action" : "kms:CreateKey",
+        "Resource" : "*",
+        "Condition" : {
+          "StringEquals" : { "aws:RequestTag/managed-by" : "nullplatform" }
+        }
+      },
+      {
+        "Sid" : "ManageOwnCMK",
+        "Effect" : "Allow",
+        "Action" : [
+          "kms:TagResource",
+          "kms:DescribeKey",
+          "kms:EnableKeyRotation",
+          "kms:GetKeyRotationStatus",
+          "kms:ListResourceTags",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:RevokeGrant"
+        ],
+        "Resource" : "*",
+        "Condition" : {
+          "StringEquals" : { "aws:ResourceTag/managed-by" : "nullplatform" }
+        }
+      },
+      {
+        "Sid" : "ManageOwnAlias",
+        "Effect" : "Allow",
+        "Action" : ["kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"],
+        "Resource" : "arn:aws:kms:*:${data.aws_caller_identity.current.account_id}:alias/nullplatform-*"
       }
     ]
   })
