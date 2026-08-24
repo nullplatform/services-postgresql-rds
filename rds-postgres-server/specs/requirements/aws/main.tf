@@ -205,16 +205,6 @@ resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
 
 ################################################################################
 # KMS IAM policy
-#
-# rds-postgres-server/deployment always creates its own customer-managed KMS
-# key for RDS storage encryption (not optional — required for AVD-AWS-0079
-# compliance) and tags it "managed-by" = "nullplatform". Scoped by that tag
-# (not "Resource" : "*") so this role can create and manage only the CMKs it
-# tags itself — it can never touch, disable, or schedule deletion of any
-# other KMS key in the account. kms:CreateKey can't be scoped to a specific
-# key (it doesn't exist yet), so it's gated on the tag being requested at
-# creation time instead (aws:RequestTag); every other action is gated on the
-# tag already present on the key (aws:ResourceTag).
 ################################################################################
 
 # Grant permissions to create and manage the customer-managed KMS key used
@@ -262,20 +252,12 @@ resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
         }
       },
       {
-        # kms:*Alias actions authorize against BOTH the alias ARN and the
-        # target key ARN (two separate resource checks) — ManageOwnCMK above
-        # covers the key side (tag-scoped); this covers the alias side.
         "Sid" : "ManageOwnAlias",
         "Effect" : "Allow",
         "Action" : ["kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"],
         "Resource" : "arn:aws:kms:*:${data.aws_caller_identity.current.account_id}:alias/nullplatform-*"
       },
       {
-        # KMS has no DescribeAlias API — the AWS provider reads an alias back
-        # via ListAliases, which only supports "Resource": "*" (it enumerates
-        # every alias in the account/region; there's no per-item ARN or tag
-        # condition to scope it to just nullplatform-*). Read-only: exposes
-        # alias names, not key material or policies.
         "Sid" : "ListAliases",
         "Effect" : "Allow",
         "Action" : "kms:ListAliases",
