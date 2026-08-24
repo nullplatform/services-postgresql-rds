@@ -269,6 +269,17 @@ resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
         "Effect" : "Allow",
         "Action" : ["kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"],
         "Resource" : "arn:aws:kms:*:${data.aws_caller_identity.current.account_id}:alias/nullplatform-*"
+      },
+      {
+        # KMS has no DescribeAlias API — the AWS provider reads an alias back
+        # via ListAliases, which only supports "Resource": "*" (it enumerates
+        # every alias in the account/region; there's no per-item ARN or tag
+        # condition to scope it to just nullplatform-*). Read-only: exposes
+        # alias names, not key material or policies.
+        "Sid" : "ListAliases",
+        "Effect" : "Allow",
+        "Action" : "kms:ListAliases",
+        "Resource" : "*"
       }
     ]
   })
