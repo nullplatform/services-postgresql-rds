@@ -132,4 +132,4 @@ export TOFU_IMPORT_DB_NAME="$DB_NAME_VAL"
 
 export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=db_setup.tfstate -backend-config=region=${REGION}"
 
-export TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME_VAL} -var=db_username=${DB_USERNAME_VAL} -var=master_username=${MASTER_USER} -var=master_secret_arn=${MASTER_SECRET_ARN}"
+export TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=region=${REGION} -var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME_VAL} -var=db_username=${DB_USERNAME_VAL} -var=master_username=${MASTER_USER} -var=master_secret_arn=${MASTER_SECRET_ARN}"

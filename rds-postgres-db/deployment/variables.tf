@@ -60,3 +60,9 @@ variable "maintenance_window" {
   default     = "Mon:04:00-Mon:05:00"
   description = "Weekly time range for maintenance operations (UTC, ddd:hh:mm-ddd:hh:mm)"
 }
+
+variable "secret_kms_key_id" {
+  type        = string
+  default     = null
+  description = "KMS key ID or ARN used to encrypt the RDS master secret in Secrets Manager. If not set, AWS encrypts it with the default aws/secretsmanager managed key."
+}

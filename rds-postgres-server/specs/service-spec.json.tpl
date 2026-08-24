@@ -46,6 +46,13 @@
           "editableOn": ["create"],
           "order": 3
         },
+        "secret_kms_key_id": {
+          "type": "string",
+          "title": "Secret Encryption Key",
+          "description": "KMS key ID or ARN used to encrypt the master password secret in Secrets Manager. Leave empty to use the AWS-managed aws/secretsmanager key.",
+          "editableOn": ["create", "update"],
+          "order": 4
+        },
         "hostname": {
           "type": "string",
           "title": "Hostname",
@@ -53,7 +60,7 @@
           "visibleOn": ["read"],
           "editableOn": [],
           "description": "RDS endpoint hostname (auto-populated after creation)",
-          "order": 4
+          "order": 5
         },
         "port": {
           "type": "number",
@@ -62,7 +69,7 @@
           "visibleOn": ["read"],
           "editableOn": [],
           "description": "RDS port (auto-populated after creation)",
-          "order": 5
+          "order": 6
         },
         "db_instance_identifier": {
           "type": "string",

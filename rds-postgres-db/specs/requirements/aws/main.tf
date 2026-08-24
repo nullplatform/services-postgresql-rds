@@ -21,20 +21,32 @@ resource "aws_iam_role" "nullplatform_rds_postgres_db" {
 }
 
 ################################################################################
-# Secrets Manager IAM policy — read-only access to the RDS master password
+# Secrets Manager IAM policy — read the RDS master password, manage the
+# app-level credentials secret this service creates in db_setup/
 ################################################################################
 
 resource "aws_iam_policy" "nullplatform_rds_postgres_db_secretsmanager_policy" {
   count = local.iam_create ? 1 : 0
 
   name        = "${local.policies_name_prefix}-rds-postgres-db-secretsmanager-policy"
-  description = "Policy for reading the RDS master password from Secrets Manager"
+  description = "Policy for reading the RDS master password and managing the app-level credentials secret in Secrets Manager"
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "secretsmanager:GetSecretValue"
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:TagResource",
+        "secretsmanager:UntagResource",
+        "secretsmanager:GetResourcePolicy",
+        "secretsmanager:ListSecretVersionIds"
+      ]
       Resource = "arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:nullplatform/rds/*"
     }]
   })

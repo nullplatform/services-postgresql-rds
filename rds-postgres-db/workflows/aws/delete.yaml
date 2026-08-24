@@ -55,9 +55,10 @@ steps:
     file: $SERVICE_PATH/scripts/aws/do_tofu
     configuration:
       TOFU_ACTION: destroy
-      # Destroy only the user. The database is preserved with master as owner
-      # so data remains available for potential future use.
-      TOFU_TARGETS: "postgresql_role.app_user,random_password.user"
+      # Destroy only the user and its Secrets Manager secret. The database is
+      # preserved with master as owner so data remains available for
+      # potential future use.
+      TOFU_TARGETS: "postgresql_role.app_user,random_password.user,aws_secretsmanager_secret_version.app,aws_secretsmanager_secret.app"
 
   - name: cleanup tfstate bucket
     type: script

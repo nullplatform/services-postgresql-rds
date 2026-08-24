@@ -27,6 +27,7 @@ SERVICE_ATTRS=$(echo "$CONTEXT" | jq -r '(.service.attributes // {}) * (.paramet
 INSTANCE_CLASS=$(echo "$SERVICE_ATTRS"   | jq -r '.instance_class    // "db.t3.micro"')
 ALLOCATED_STORAGE=$(echo "$SERVICE_ATTRS" | jq -r '.allocated_storage // 20')
 POSTGRES_VERSION=$(echo "$SERVICE_ATTRS"  | jq -r '.postgres_version  // "16"')
+SECRET_KMS_KEY_ID=$(echo "$SERVICE_ATTRS" | jq -r '.secret_kms_key_id // ""')
 
 # --- Read static config from values.yaml ------------------------------------
 # CRITICAL: $VALUES is a FILE PATH set by "np service workflow exec --values <path>",
@@ -133,7 +134,17 @@ export TOFU_MODULE_DIR="$SERVICE_PATH/deployment"
 
 export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=terraform.tfstate -backend-config=region=${REGION}"
 
-export TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=instance_name=${INSTANCE_NAME} -var=region=${REGION} -var=vpc_id=${VPC_ID} -var=instance_class=${INSTANCE_CLASS} -var=allocated_storage=${ALLOCATED_STORAGE} -var=postgres_version=${POSTGRES_VERSION}"
+TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=instance_name=${INSTANCE_NAME} -var=region=${REGION} -var=vpc_id=${VPC_ID} -var=instance_class=${INSTANCE_CLASS} -var=allocated_storage=${ALLOCATED_STORAGE} -var=postgres_version=${POSTGRES_VERSION}"
+
+# Omit the -var entirely when unset, rather than passing an empty string —
+# the Terraform variable defaults to null, which is what makes AWS fall back
+# to the aws/secretsmanager managed key. A "" value would instead fail as an
+# invalid KMS key ID.
+if [ -n "$SECRET_KMS_KEY_ID" ]; then
+  TOFU_VARIABLES="${TOFU_VARIABLES} -var=secret_kms_key_id=${SECRET_KMS_KEY_ID}"
+fi
+
+export TOFU_VARIABLES
 
 # --- Extract link context (link workflows only) -----------------------------
 # These are consumed by build_permissions_context in the next workflow step.

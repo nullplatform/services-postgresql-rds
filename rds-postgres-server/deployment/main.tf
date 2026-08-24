@@ -45,6 +45,7 @@ resource "random_password" "master" {
 resource "aws_secretsmanager_secret" "master" {
   name                    = "nullplatform/rds/${var.instance_name}/master"
   recovery_window_in_days = 0
+  kms_key_id              = var.secret_kms_key_id
 
   tags = {
     "managed-by"   = "nullplatform"
