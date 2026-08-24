@@ -243,6 +243,7 @@ resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
         "Action" : [
           "kms:TagResource",
           "kms:DescribeKey",
+          "kms:GetKeyPolicy",
           "kms:EnableKeyRotation",
           "kms:GetKeyRotationStatus",
           "kms:ListResourceTags",
