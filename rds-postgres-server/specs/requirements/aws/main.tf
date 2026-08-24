@@ -251,7 +251,10 @@ resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
           "kms:CancelKeyDeletion",
           "kms:CreateGrant",
           "kms:ListGrants",
-          "kms:RevokeGrant"
+          "kms:RevokeGrant",
+          "kms:CreateAlias",
+          "kms:DeleteAlias",
+          "kms:UpdateAlias"
         ],
         "Resource" : "*",
         "Condition" : {
@@ -259,6 +262,9 @@ resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
         }
       },
       {
+        # kms:*Alias actions authorize against BOTH the alias ARN and the
+        # target key ARN (two separate resource checks) — ManageOwnCMK above
+        # covers the key side (tag-scoped); this covers the alias side.
         "Sid" : "ManageOwnAlias",
         "Effect" : "Allow",
         "Action" : ["kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"],
