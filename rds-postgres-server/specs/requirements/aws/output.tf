@@ -13,6 +13,11 @@ output "rds_secretsmanager_policy_arn" {
   value       = local.iam_create ? aws_iam_policy.nullplatform_rds_secretsmanager_policy[0].arn : ""
 }
 
+output "rds_kms_policy_arn" {
+  description = "ARN of the KMS policy for the customer-managed RDS storage encryption key"
+  value       = local.iam_create ? aws_iam_policy.nullplatform_rds_kms_policy[0].arn : ""
+}
+
 output "permissions_role_arn" {
   description = "ARN of the rds-postgres-server permissions role assumed by the nullplatform agent role. Pass to the agent (assume_role_arns)."
   value       = local.iam_create ? aws_iam_role.nullplatform_rds_postgres_server[0].arn : ""

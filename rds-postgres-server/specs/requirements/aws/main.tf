@@ -48,6 +48,12 @@ resource "aws_iam_role_policy_attachment" "rds_s3" {
   policy_arn = aws_iam_policy.nullplatform_rds_s3_policy[0].arn
 }
 
+resource "aws_iam_role_policy_attachment" "rds_kms" {
+  count      = local.iam_create ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
+  policy_arn = aws_iam_policy.nullplatform_rds_kms_policy[0].arn
+}
+
 ################################################################################
 # RDS IAM policy
 ################################################################################
@@ -191,6 +197,70 @@ resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
           "secretsmanager:GetResourcePolicy",
           "secretsmanager:ListSecretVersionIds"
         ],
+        "Resource" : "*"
+      }
+    ]
+  })
+}
+
+################################################################################
+# KMS IAM policy
+################################################################################
+
+# Grant permissions to create and manage the customer-managed KMS key used
+# for RDS storage encryption, scoped to keys this role itself tags
+resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
+  count = local.iam_create ? 1 : 0
+
+  name        = "${local.policies_name_prefix}-rds-kms-policy"
+  description = "Policy for managing the customer-managed KMS key used for RDS storage encryption, scoped to keys tagged managed-by=nullplatform"
+
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "CreateOwnCMK",
+        "Effect" : "Allow",
+        "Action" : "kms:CreateKey",
+        "Resource" : "*",
+        "Condition" : {
+          "StringEquals" : { "aws:RequestTag/managed-by" : "nullplatform" }
+        }
+      },
+      {
+        "Sid" : "ManageOwnCMK",
+        "Effect" : "Allow",
+        "Action" : [
+          "kms:TagResource",
+          "kms:DescribeKey",
+          "kms:GetKeyPolicy",
+          "kms:EnableKeyRotation",
+          "kms:GetKeyRotationStatus",
+          "kms:ListResourceTags",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion",
+          "kms:CreateGrant",
+          "kms:ListGrants",
+          "kms:RevokeGrant",
+          "kms:CreateAlias",
+          "kms:DeleteAlias",
+          "kms:UpdateAlias"
+        ],
+        "Resource" : "*",
+        "Condition" : {
+          "StringEquals" : { "aws:ResourceTag/managed-by" : "nullplatform" }
+        }
+      },
+      {
+        "Sid" : "ManageOwnAlias",
+        "Effect" : "Allow",
+        "Action" : ["kms:CreateAlias", "kms:DeleteAlias", "kms:UpdateAlias"],
+        "Resource" : "arn:aws:kms:*:${data.aws_caller_identity.current.account_id}:alias/nullplatform-*"
+      },
+      {
+        "Sid" : "ListAliases",
+        "Effect" : "Allow",
+        "Action" : "kms:ListAliases",
         "Resource" : "*"
       }
     ]
