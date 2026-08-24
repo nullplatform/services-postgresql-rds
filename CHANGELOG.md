@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.0.3...v0.1.0) (2026-08-24)
+
+
+### Features
+
+* **rds-postgres-server:** make Secrets Manager encryption key configurable ([b20d702](https://github.com/nullplatform/services-postgresql-rds/commit/b20d7021bfbbdc1e3da14ab463184e122f00c5cd))
+
+
+### Bug Fixes
+
+* **rds-postgres-db:** store app-level credentials in Secrets Manager ([066e333](https://github.com/nullplatform/services-postgresql-rds/commit/066e3337f93853f71caee9bcbcfea391fa2a60c9))
+
 ## [0.0.3](https://github.com/nullplatform/services-postgresql-rds/compare/v0.0.2...v0.0.3) (2026-07-28)
 
 
