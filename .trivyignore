@@ -1,9 +1,7 @@
-# Trivy misconfiguration suppressions for this repo.
-# Each entry is intentional and documented; revisit if the module changes.
+# Trivy misconfiguration suppressions for this repo (intentional, documented).
 
-# AVD-AWS-0104 — RDS security group allows unrestricted egress (0.0.0.0/0).
-# Standard for an RDS instance's own security group (matches the AWS default
-# VPC SG behavior): the instance needs outbound access for things like CA
-# bundle/extension fetches and Secrets Manager rotation. Inbound is already
-# restricted to PostgreSQL (5432) from the VPC's own CIDR blocks.
-AVD-AWS-0104
+# AVD-DS-0002 — the worker image builds on the shared worker-bridge base,
+# which runs as root by design today (same as scopes-lambda): the runtime
+# user is governed by the agent's worker pod securityContext/patches, not by
+# a USER directive here. Revisit when the bridge ships a non-root variant.
+AVD-DS-0002
