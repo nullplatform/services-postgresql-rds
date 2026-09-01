@@ -109,8 +109,26 @@ jobs:
             echo "::error::NP_ARTIFACT_NRN variable is not set"
             exit 1
           fi
-          curl -fsSL https://cli.nullplatform.com/install.sh | VERSION=alpha-packages sh
+          curl -fsSL https://cli.nullplatform.com/install.sh | VERSION=alpha sh
           export PATH="$HOME/.local/bin:$PATH"
+
+          # Annotations are last-write-wins full replacement on the revision, so
+          # every run sends the complete set: the release-please notes as the
+          # curated changelog plus the OCI source/revision/version keys. The
+          # release body is truncated at its first '## Artifact' section so a
+          # backfill re-run never feeds the appended artifact tables back in.
+          EXTRA_ARGS=()
+          RELEASE_BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.body // ""' 2>/dev/null || true)
+          printf '%s' "$RELEASE_BODY" | sed '/^## Artifact/,$d' > changelog.md
+          if grep -q '[^[:space:]]' changelog.md; then
+            EXTRA_ARGS+=(--changelog-file changelog.md)
+          fi
+          # The image was built from the tag's commit, not the triggering sha
+          # (they differ on existing_tag backfills).
+          TAG_COMMIT=$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq '.sha' 2>/dev/null || true)
+          if [ -n "$TAG_COMMIT" ]; then
+            EXTRA_ARGS+=(--annotation "org.opencontainers.image.revision=$TAG_COMMIT")
+          fi
 
           REG_HOST="${ECR_REGISTRY%%/*}"
           REPOSITORY="${ECR_REGISTRY#*/}/$IMAGE_NAME"
@@ -120,6 +138,10 @@ jobs:
             --registry "$REG_HOST" \
             --repository "$REPOSITORY" \
             --digest "$DIGEST" \
+            --tag "$TAG" \
+            --annotation "org.opencontainers.image.source=${{ github.server_url }}/$GITHUB_REPOSITORY" \
+            --annotation "org.opencontainers.image.version=$TAG" \
+            "${EXTRA_ARGS[@]}" \
             --visible-to "organization=*" \
             --format json)
           echo "$OUTPUT"
