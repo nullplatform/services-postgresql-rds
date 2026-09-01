@@ -1,15 +1,140 @@
 name: release
 
+# One repo, TWO worker images (rds-postgres-server + rds-postgres-db), one
+# chained run: release-please cuts the version once, the release-publish-oci
+# chain builds/pushes/registers the SERVER image, and a parallel pair of jobs
+# does the same for the DB image against the same tag — both artifacts end up
+# in the release notes.
+#
+# Chained on purpose: release-please creates tags with GITHUB_TOKEN, and
+# GitHub never triggers workflows from bot-token events.
+#
+# Recovery / backfill: dispatch with existing_tag to publish + finalize a tag
+# that already exists.
+#
+# Configure: secrets AWS_ROLE_ARN_ECR_PUSH + ARTIFACT_NP_API_KEY, variable
+# NP_ARTIFACT_NRN.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      existing_tag:
+        description: 'Publish + finalize an existing tag (recovery/backfill)'
+        required: true
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
+  id-token: write   # OIDC auth against AWS for the ECR pushes
 
 jobs:
+  # Server image rides the full chain: release-please + build + push +
+  # artifact registration + release finalize.
   release:
-    uses: nullplatform/actions-nullplatform/.github/workflows/release.yml@main
-    secrets: inherit
+    uses: nullplatform/actions-nullplatform/.github/workflows/release-publish-oci.yml@main
+    with:
+      image_name: services/rds-postgres-server
+      dockerfile: Dockerfile.rds-postgres-server
+      existing_tag: ${{ inputs.existing_tag || '' }}
+    secrets:
+      aws_role_arn: ${{ secrets.AWS_ROLE_ARN_ECR_PUSH }}
+      artifact_np_api_key: ${{ secrets.ARTIFACT_NP_API_KEY }}
+
+  # DB image: same tag, its own build/push...
+  publish-db:
+    needs: release
+    if: ${{ !cancelled() && (needs.release.outputs.release_created == 'true' || inputs.existing_tag != '') }}
+    uses: nullplatform/actions-nullplatform/.github/workflows/docker-build-push-ecr.yml@main
+    with:
+      image_name: services/rds-postgres-db
+      dockerfile: Dockerfile.rds-postgres-db
+      tag: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
+    secrets:
+      aws_role_arn: ${{ secrets.AWS_ROLE_ARN_ECR_PUSH }}
+
+  # ...and its own artifact registration + release-notes row. Mirrors the
+  # chain's finalize job — the chain registers one image per run, and this
+  # repo deliberately ships two from one version.
+  finalize-db:
+    name: Register db artifact & append to release
+    needs: [release, publish-db]
+    if: ${{ !cancelled() && needs.publish-db.result == 'success' }}
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
+      IMAGE_TAG: ${{ needs.publish-db.outputs.image_tag }}
+      DIGEST: ${{ needs.publish-db.outputs.image_digest }}
+      ECR_REGISTRY: public.ecr.aws/nullplatform
+      IMAGE_NAME: services/rds-postgres-db
+    steps:
+      - name: Register oci_image artifact (db)
+        id: artifact
+        env:
+          NULLPLATFORM_API_KEY: ${{ secrets.ARTIFACT_NP_API_KEY }}
+          NP_ARTIFACT_NRN: ${{ vars.NP_ARTIFACT_NRN }}
+        run: |
+          set -o pipefail
+          if [ -z "$NULLPLATFORM_API_KEY" ]; then
+            echo "::error::ARTIFACT_NP_API_KEY secret is empty or not set"
+            exit 1
+          fi
+          if [ -z "$NP_ARTIFACT_NRN" ]; then
+            echo "::error::NP_ARTIFACT_NRN variable is not set"
+            exit 1
+          fi
+          curl -fsSL https://cli.nullplatform.com/install.sh | VERSION=alpha-packages sh
+          export PATH="$HOME/.local/bin:$PATH"
+
+          REG_HOST="${ECR_REGISTRY%%/*}"
+          REPOSITORY="${ECR_REGISTRY#*/}/$IMAGE_NAME"
+          OUTPUT=$(np artifact create \
+            --nrn "$NP_ARTIFACT_NRN" \
+            --type oci_image \
+            --registry "$REG_HOST" \
+            --repository "$REPOSITORY" \
+            --digest "$DIGEST" \
+            --visible-to "organization=*" \
+            --format json)
+          echo "$OUTPUT"
+          ARTIFACT_ID=$(echo "$OUTPUT" | jq -r '.id // empty' || true)
+          [ -z "$ARTIFACT_ID" ] && ARTIFACT_ID="registered (id unavailable)"
+          echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Append db artifact metadata to the release
+        if: ${{ !cancelled() }}
+        env:
+          ARTIFACT_ID: ${{ steps.artifact.outputs.artifact_id }}
+          REGISTER_RESULT: ${{ steps.artifact.outcome }}
+        run: |
+          IMAGE="$ECR_REGISTRY/$IMAGE_NAME"
+          case "$REGISTER_RESULT" in
+            success) ID_ROW="${ARTIFACT_ID}" ;;
+            *)       ID_ROW="registration failed — see run log" ;;
+          esac
+
+          RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq '.id' 2>/dev/null || true)
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+              --jq "[.[] | select(.tag_name==\"$TAG\")][0].id // empty")
+          fi
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::warning::no release found for $TAG; skipping the append"
+            exit 0
+          fi
+
+          # shellcheck disable=SC2016
+          SECTION=$(printf '## Artifact (rds-postgres-db)\n\n|  |  |\n|---|---|\n| Image | `%s` |\n| Digest | `%s` |\n| Pinned reference | `%s` |\n| Artifact ID | `%s` |' \
+            "$IMAGE:$IMAGE_TAG" "$DIGEST" "$IMAGE@$DIGEST" "$ID_ROW")
+
+          BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.body // ""')
+          if ! printf '%s' "$BODY" | grep -qF "$DIGEST"; then
+            BODY=$(printf '%s\n\n%s' "$BODY" "$SECTION")
+          fi
+          printf '%s' "$BODY" > body.md
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -F draft=false -F "body=@body.md" > /dev/null
+          echo "db artifact appended to release $TAG"

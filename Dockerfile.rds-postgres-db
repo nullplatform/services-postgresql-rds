@@ -1,0 +1,18 @@
+# syntax=docker/dockerfile:1
+#
+# rds-postgres-db service worker image — same base and tooling as the server
+# image, plus the postgres client its provisioning scripts drive with psql.
+FROM public.ecr.aws/nullplatform/scopes/worker-bridge:1.0.0
+
+RUN apk add --no-cache aws-cli gomplate postgresql16-client
+
+ARG TOFU_VERSION=1.10.10
+ARG TARGETARCH
+RUN curl -fsSL "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_linux_${TARGETARCH}.tar.gz" \
+      | tar -xz -C /usr/local/bin tofu \
+    && tofu version
+
+COPY . /app/pkg
+ENV NP_PACKAGE_NAME=rds-postgres-db \
+    NP_SERVICE_PATH=/app/pkg/rds-postgres-db \
+    NP_SCOPE_ENTRYPOINT=/app/pkg/rds-postgres-db/entrypoint/entrypoint
