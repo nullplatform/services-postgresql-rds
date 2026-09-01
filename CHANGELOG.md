@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.1.1...v0.2.0) (2026-09-01)
+
+
+### Features
+
+* **release:** publish tag, changelog and OCI annotations on the db artifact ([b9a745e](https://github.com/nullplatform/services-postgresql-rds/commit/b9a745e1f29bc7d58e78def337fee6b08a938f68))
+* **release:** publish tag, changelog and OCI annotations on the db artifact ([087edaf](https://github.com/nullplatform/services-postgresql-rds/commit/087edafaeec49f09779cb467d866117ccace6660))
+
+
+### Bug Fixes
+
+* **ci:** inline the rds-postgres-db build — release run failed at startup ([59ee1cf](https://github.com/nullplatform/services-postgresql-rds/commit/59ee1cf7a46e217d9be18c5fd481ef89cab2ddd4))
+* **ci:** inline the rds-postgres-db build — startup_failure on main ([a2ea8e5](https://github.com/nullplatform/services-postgresql-rds/commit/a2ea8e56da17d26c6a3e681f8433a8b3c668b12a))
+
 ## [0.1.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.1.0...v0.1.1) (2026-08-24)
 
 
