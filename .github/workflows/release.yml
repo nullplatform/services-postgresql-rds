@@ -43,31 +43,54 @@ jobs:
       aws_role_arn: ${{ secrets.AWS_ROLE_ARN_ECR_PUSH }}
       artifact_np_api_key: ${{ secrets.ARTIFACT_NP_API_KEY }}
 
-  # DB image: same tag, its own build/push...
-  publish-db:
+  # DB image: same tag, built inline (a second reusable call to the same
+  # workflow file at a different ref made the run fail at startup; an inline
+  # buildx job sidesteps it and mirrors what the chain's build does).
+  publish_db:
+    name: Build & push rds-postgres-db
     needs: release
     if: ${{ !cancelled() && (needs.release.outputs.release_created == 'true' || inputs.existing_tag != '') }}
-    uses: nullplatform/actions-nullplatform/.github/workflows/docker-build-push-ecr.yml@main
-    with:
-      image_name: services/rds-postgres-db
-      dockerfile: Dockerfile.rds-postgres-db
-      tag: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
-    secrets:
-      aws_role_arn: ${{ secrets.AWS_ROLE_ARN_ECR_PUSH }}
+    runs-on: ubuntu-24.04
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+    env:
+      IMAGE: public.ecr.aws/nullplatform/services/rds-postgres-db
+      TAG: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_PUSH }}
+          aws-region: us-east-1
+      - name: Login to ECR Public
+        run: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+      - name: Build and push
+        id: build
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -f Dockerfile.rds-postgres-db \
+            -t "$IMAGE:$TAG" \
+            --push .
+          DIGEST=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "pushed $IMAGE:$TAG @ $DIGEST"
 
-  # ...and its own artifact registration + release-notes row. Mirrors the
-  # chain's finalize job — the chain registers one image per run, and this
-  # repo deliberately ships two from one version.
-  finalize-db:
+  # ...and its own artifact registration + release-notes row (the chain
+  # registers one image per run; this repo ships two from one version).
+  finalize_db:
     name: Register db artifact & append to release
-    needs: [release, publish-db]
-    if: ${{ !cancelled() && needs.publish-db.result == 'success' }}
+    needs: [release, publish_db]
+    if: ${{ !cancelled() && needs.publish_db.result == 'success' }}
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
-      IMAGE_TAG: ${{ needs.publish-db.outputs.image_tag }}
-      DIGEST: ${{ needs.publish-db.outputs.image_digest }}
+      DIGEST: ${{ needs.publish_db.outputs.image_digest }}
       ECR_REGISTRY: public.ecr.aws/nullplatform
       IMAGE_NAME: services/rds-postgres-db
     steps:
@@ -128,7 +151,7 @@ jobs:
 
           # shellcheck disable=SC2016
           SECTION=$(printf '## Artifact (rds-postgres-db)\n\n|  |  |\n|---|---|\n| Image | `%s` |\n| Digest | `%s` |\n| Pinned reference | `%s` |\n| Artifact ID | `%s` |' \
-            "$IMAGE:$IMAGE_TAG" "$DIGEST" "$IMAGE@$DIGEST" "$ID_ROW")
+            "$IMAGE:$TAG" "$DIGEST" "$IMAGE@$DIGEST" "$ID_ROW")
 
           BODY=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.body // ""')
           if ! printf '%s' "$BODY" | grep -qF "$DIGEST"; then
