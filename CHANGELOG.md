@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.2.0...v0.2.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **deps:** bump OpenTofu to 1.12.6 ([#16](https://github.com/nullplatform/services-postgresql-rds/issues/16)) ([3e07ba1](https://github.com/nullplatform/services-postgresql-rds/commit/3e07ba12fd8a5120b2cef7229b0d890f88eb386b))
+
 ## [0.2.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.1.1...v0.2.0) (2026-09-01)
 
 
