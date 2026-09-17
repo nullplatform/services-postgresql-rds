@@ -1,12 +1,16 @@
 # Keeps the base image FROM pinned to the latest published version: when a
 # new tag of the base is released, Dependabot opens a bump PR and this repo's
-# CI validates it before merge.
+# CI (build + image scan) validates it before merge.
 version: 2
 updates:
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "daily"
+    # fix(deps): release-please only cuts a release for feat/fix; chore(deps) would leave the bump unpublished.
+    commit-message:
+      prefix: "fix"
+      include: "scope"
     labels:
       - "dependencies"
       - "base-image"
