@@ -2,7 +2,7 @@
 #
 # rds-postgres-server service worker image — built on the lean gRPC worker
 # bridge, with the cloud tooling the RDS server workflows need baked in.
-FROM public.ecr.aws/nullplatform/scopes/worker-bridge:1.0.0
+FROM public.ecr.aws/nullplatform/scopes/worker-bridge:1.1.1
 
 RUN apk add --no-cache aws-cli gomplate
 
