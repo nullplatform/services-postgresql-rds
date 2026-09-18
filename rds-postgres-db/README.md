@@ -128,7 +128,21 @@ No RDS, EC2, or VPC resources are created — those belong to the auto-discovere
 This service requires fewer AWS permissions than `rds-postgres-server` (no RDS/EC2), but it does manage its own Secrets Manager secret. The agent needs:
 
 - **Secrets Manager**: `GetSecretValue` — to retrieve the master PostgreSQL password from the ARN stored in service attributes; plus `CreateSecret`, `PutSecretValue`, `UpdateSecret`, `DeleteSecret`, `DescribeSecret`, `TagResource`, `UntagResource`, `GetResourcePolicy`, `ListSecretVersionIds` — to create, update, and delete the app-level credentials secret this service owns
-- **S3**: full lifecycle on the `np-service-<SERVICE_ID>` bucket — `build_context` creates and manages its own per-service Terraform state bucket, same as `rds-postgres-server`
+- **S3**: read/write on the shared state bucket named by `RDS_S3_STATE_BUCKET`, plus full lifecycle on `np-service-*` while the deprecated per-instance fallback is still supported
+
+Set `RDS_S3_STATE_BUCKET` on the agent to the name of an existing S3 bucket and every service instance keeps its Terraform state there under `services/<service-id>/`. Both packages share the bucket; the service id keeps their keys apart. Deleting a service removes only its own prefix and never touches the bucket.
+
+The bucket must already exist — the service does not create it. Grant the permissions role access to it by passing `state_bucket_name` to the `specs/requirements/aws` module.
+
+Leaving `RDS_S3_STATE_BUCKET` unset falls back to creating one bucket per instance (`np-service-<service-id>`), which is **deprecated** and logs a warning on every run. To move an existing instance:
+
+```bash
+aws s3 cp --recursive "s3://np-service-<service-id>/" \
+                      "s3://<shared-bucket>/services/<service-id>/"
+aws s3 rb "s3://np-service-<service-id>" --force
+```
+
+Copy the state before the next action runs. An action that finds no state at the new prefix will try to create infrastructure that already exists.
 
 No RDS or EC2 permissions are needed.
 

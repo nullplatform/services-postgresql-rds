@@ -106,24 +106,48 @@ echo "Using VPC: ${VPC_ID}"
 # The agent IAM role must allow s3:CreateBucket + s3:PutBucketVersioning
 # on arn:aws:s3:::np-service-* and the usual Get/Put/Delete/List actions.
 
-TFSTATE_BUCKET="np-service-${SERVICE_ID}"
-
-if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
-  echo "Creating tfstate bucket: ${TFSTATE_BUCKET}"
-  if [ "$REGION" = "us-east-1" ]; then
-    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
-  else
-    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" \
-      --create-bucket-configuration LocationConstraint="$REGION"
+if [ -n "${RDS_S3_STATE_BUCKET+set}" ]; then
+  if [ -z "$RDS_S3_STATE_BUCKET" ]; then
+    echo "ERROR: RDS_S3_STATE_BUCKET is set but empty." >&2
+    echo "       Set it to the name of an existing bucket, or unset it to fall back" >&2
+    echo "       to the deprecated per-instance bucket." >&2
+    exit 1
   fi
-  aws s3api put-bucket-versioning --bucket "$TFSTATE_BUCKET" \
-    --versioning-configuration Status=Enabled
-  echo "Bucket ${TFSTATE_BUCKET} created with versioning enabled."
+
+  TFSTATE_BUCKET="$RDS_S3_STATE_BUCKET"
+  TFSTATE_KEY_PREFIX="services/${SERVICE_ID}/"
+
+  if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" >/dev/null 2>&1; then
+    echo "ERROR: the state bucket ${TFSTATE_BUCKET} does not exist or is not reachable from ${REGION}." >&2
+    exit 1
+  fi
+
+  echo "Using shared state bucket: ${TFSTATE_BUCKET} (prefix ${TFSTATE_KEY_PREFIX})"
 else
-  echo "Using existing tfstate bucket: ${TFSTATE_BUCKET}"
+  TFSTATE_BUCKET="np-service-${SERVICE_ID}"
+  TFSTATE_KEY_PREFIX=""
+
+  echo "WARNING: RDS_S3_STATE_BUCKET is not set, so this service is creating its own" >&2
+  echo "         bucket per instance. That is deprecated — point it at an existing" >&2
+  echo "         shared bucket instead." >&2
+
+  if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
+    echo "Creating tfstate bucket: ${TFSTATE_BUCKET}"
+    if [ "$REGION" = "us-east-1" ]; then
+      aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
+    else
+      aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" \
+        --create-bucket-configuration LocationConstraint="$REGION"
+    fi
+    aws s3api put-bucket-versioning --bucket "$TFSTATE_BUCKET" \
+      --versioning-configuration Status=Enabled
+    echo "Bucket ${TFSTATE_BUCKET} created with versioning enabled."
+  else
+    echo "Using existing tfstate bucket: ${TFSTATE_BUCKET}"
+  fi
 fi
 
-export TFSTATE_BUCKET
+export TFSTATE_BUCKET TFSTATE_KEY_PREFIX
 
 # --- Set Terraform execution variables --------------------------------------
 
@@ -132,7 +156,7 @@ mkdir -p "$OUTPUT_DIR"
 
 export TOFU_MODULE_DIR="$SERVICE_PATH/deployment"
 
-export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=terraform.tfstate -backend-config=region=${REGION}"
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=${TFSTATE_KEY_PREFIX}terraform.tfstate -backend-config=region=${REGION}"
 
 TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=instance_name=${INSTANCE_NAME} -var=region=${REGION} -var=vpc_id=${VPC_ID} -var=instance_class=${INSTANCE_CLASS} -var=allocated_storage=${ALLOCATED_STORAGE} -var=postgres_version=${POSTGRES_VERSION}"
 
