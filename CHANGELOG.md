@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.2.1...v0.3.0) (2026-09-18)
+
+
+### Features
+
+* dependabot for base image bumps ([ed2ed91](https://github.com/nullplatform/services-postgresql-rds/commit/ed2ed9127ef29c5582a25dd713aaa24ed6a04231))
+* dependabot for base image bumps ([167e21f](https://github.com/nullplatform/services-postgresql-rds/commit/167e21f85a4ec216b2ef9c101c8f7ded6bd09b10))
+
+
+### Bug Fixes
+
+* **ci:** auto-merge the release PR from workflow_run; Dependabot commits as fix(deps) ([0118756](https://github.com/nullplatform/services-postgresql-rds/commit/0118756653ad3220e95b043db7dc72af2531a606))
+* **deps:** bump nullplatform/scopes/worker-bridge from 1.0.0 to 1.1.1 ([440ecb2](https://github.com/nullplatform/services-postgresql-rds/commit/440ecb24b37d0a72cd0eb8c468bd3220b1663778))
+
 ## [0.2.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.2.0...v0.2.1) (2026-09-14)
 
 
