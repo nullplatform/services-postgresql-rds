@@ -2,7 +2,7 @@
 #
 # rds-postgres-db service worker image — same base and tooling as the server
 # image, plus the postgres client its provisioning scripts drive with psql.
-FROM public.ecr.aws/nullplatform/scopes/worker-bridge:1.0.0
+FROM public.ecr.aws/nullplatform/scopes/worker-bridge:1.1.1
 
 RUN apk add --no-cache aws-cli gomplate postgresql16-client
 
