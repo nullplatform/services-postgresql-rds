@@ -27,6 +27,14 @@ if [ -z "${TFSTATE_BUCKET:-}" ]; then
   exit 0
 fi
 
+PREFIX="${TFSTATE_KEY_PREFIX:-}"
+
+if [ -n "${RDS_S3_STATE_BUCKET+set}" ] && [ -z "$PREFIX" ]; then
+  echo "ERROR: a shared state bucket is configured but TFSTATE_KEY_PREFIX is empty." >&2
+  echo "       Refusing to continue: this would delete every service's state." >&2
+  exit 1
+fi
+
 if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
   echo "Bucket ${TFSTATE_BUCKET} does not exist, nothing to delete."
   exit 0
@@ -41,6 +49,7 @@ delete_objects() {
   objects=$(aws s3api list-object-versions \
     --bucket "$TFSTATE_BUCKET" \
     --region "$REGION" \
+    --prefix "$PREFIX" \
     --query "${query}" \
     --output json) || rc=$?
 
@@ -67,6 +76,11 @@ delete_objects() {
 
 delete_objects 'Versions[].{Key:Key,VersionId:VersionId}' "object versions"
 delete_objects 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' "delete markers"
+
+if [ -n "$PREFIX" ]; then
+  echo "Removed tofu state under s3://${TFSTATE_BUCKET}/${PREFIX}"
+  exit 0
+fi
 
 echo "Deleting bucket ${TFSTATE_BUCKET}..."
 aws s3api delete-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"

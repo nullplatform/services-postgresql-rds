@@ -48,3 +48,9 @@ variable "iam_resource_tags_json" {
   type        = map(string)
   default     = {}
 }
+
+variable "state_bucket_name" {
+  description = "Name of an existing S3 bucket holding the tofu state for every service instance, each under its own key prefix. The agent receives it as RDS_S3_STATE_BUCKET. Leave empty to keep the deprecated bucket-per-instance behaviour."
+  type        = string
+  default     = ""
+}
