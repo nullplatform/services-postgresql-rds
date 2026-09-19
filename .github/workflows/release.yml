@@ -34,7 +34,7 @@ jobs:
   # Server image rides the full chain: release-please + build + push +
   # artifact registration + release finalize.
   release:
-    uses: nullplatform/actions-nullplatform/.github/workflows/release-publish-oci.yml@v1.5.0
+    uses: nullplatform/actions-nullplatform/.github/workflows/release-publish-oci.yml@v1
     with:
       image_name: services/rds-postgres-server
       dockerfile: Dockerfile.rds-postgres-server
