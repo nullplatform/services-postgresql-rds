@@ -62,7 +62,7 @@ jobs:
           ref: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN_ECR_PUSH }}
           aws-region: us-east-1
