@@ -9,7 +9,7 @@ set -uo pipefail
 PACKAGE="${1:-rds-postgres-db}"
 BUILD_CONTEXT="${PACKAGE}/scripts/aws/build_context"
 DELETE_STATE="${PACKAGE}/scripts/aws/delete_tfstate_objects"
-BUCKET_VAR="RDS_S3_STATE_BUCKET"
+BUCKET_VAR="RDS_POSTGRES_S3_STATE_BUCKET"
 SERVICE_ID="11111111-2222-3333-4444-555555555555"
 PASS=0
 FAIL=0
@@ -234,7 +234,7 @@ if grep -q 'create-bucket' "$SANDBOX/aws.log"; then
 else
 	check "never falls back to creating a bucket" "ok"
 fi
-if echo "$err" | grep -q 'RDS_S3_STATE_BUCKET'; then
+if echo "$err" | grep -q 'RDS_POSTGRES_S3_STATE_BUCKET'; then
 	check "names the variable to set" "ok"
 else
 	check "names the variable to set" "bad" "stderr: $(echo "$err" | tr '\n' '|')"
@@ -280,7 +280,7 @@ teardown_sandbox
 echo "=== both packages resolve state the same way ==="
 extract_block() {
 	# shellcheck disable=SC2016
-	sed -n '/^if \[ -z "${RDS_S3_STATE_BUCKET:-}" \]; then$/,/^export TFSTATE_BUCKET TFSTATE_KEY_PREFIX$/p' "$1"
+	sed -n '/^if \[ -z "${RDS_POSTGRES_S3_STATE_BUCKET:-}" \]; then$/,/^export TFSTATE_BUCKET TFSTATE_KEY_PREFIX$/p' "$1"
 }
 ROOT="$(cd "$(dirname "$BUILD_CONTEXT")/../../.." && pwd)"
 BLOCK_DB="$(extract_block "$ROOT/rds-postgres-db/scripts/aws/build_context")"

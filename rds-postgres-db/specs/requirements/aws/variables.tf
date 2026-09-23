@@ -50,7 +50,7 @@ variable "iam_resource_tags_json" {
 }
 
 variable "state_bucket_name" {
-  description = "Name of the existing S3 bucket holding the tofu state for every service instance, each under its own key prefix. Any bucket works — the module grants the role access to this one and assumes no naming convention. The agent receives the same name as RDS_S3_STATE_BUCKET."
+  description = "Name of the existing S3 bucket holding the tofu state for every service instance, each under its own key prefix. Any bucket works — the module grants the role access to this one and assumes no naming convention. The agent receives the same name as RDS_POSTGRES_S3_STATE_BUCKET."
   type        = string
 
   validation {

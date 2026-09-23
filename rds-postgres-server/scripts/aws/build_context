@@ -101,18 +101,18 @@ fi
 echo "Using VPC: ${VPC_ID}"
 
 # --- Resolve where the tofu state lives -------------------------------------
-# RDS_S3_STATE_BUCKET names an existing bucket holding the state of every
+# RDS_POSTGRES_S3_STATE_BUCKET names an existing bucket holding the state of every
 # service instance, each under its own key prefix. The service never creates
 # buckets and assumes nothing about the bucket's name.
 
-if [ -z "${RDS_S3_STATE_BUCKET:-}" ]; then
-  echo "ERROR: RDS_S3_STATE_BUCKET is not set." >&2
+if [ -z "${RDS_POSTGRES_S3_STATE_BUCKET:-}" ]; then
+  echo "ERROR: RDS_POSTGRES_S3_STATE_BUCKET is not set." >&2
   echo "       Set it on the agent to the name of an existing S3 bucket that holds" >&2
   echo "       the tofu state for every instance of this service." >&2
   exit 1
 fi
 
-TFSTATE_BUCKET="$RDS_S3_STATE_BUCKET"
+TFSTATE_BUCKET="$RDS_POSTGRES_S3_STATE_BUCKET"
 TFSTATE_KEY_PREFIX="services/${SERVICE_ID}/"
 
 if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" >/dev/null 2>&1; then
