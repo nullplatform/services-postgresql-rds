@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.3.0...v0.3.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* pin tofu 1.12.6 and install it when the cached one is older ([2de7a68](https://github.com/nullplatform/services-postgresql-rds/commit/2de7a6866f7e765adf06ff891adebcb75f99d8d7))
+* pin tofu 1.12.6 and install it when the cached one is older ([c93a1e8](https://github.com/nullplatform/services-postgresql-rds/commit/c93a1e82b235e11057b5d28bed5926cae2a7f467))
+
 ## [0.3.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.2.1...v0.3.0) (2026-09-18)
 
 
