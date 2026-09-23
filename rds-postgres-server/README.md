@@ -89,7 +89,7 @@ Exposed in the nullplatform UI when creating or updating the service:
 | `aws_db_subnet_group` | Subnet group using VPC subnets tagged `nullplatform/subnet-type=private` |
 | `aws_security_group` | Allows port 5432 ingress from within the VPC |
 | `aws_secretsmanager_secret` | Stores the master PostgreSQL password |
-| `aws_s3_bucket` | `np-service-<SERVICE_ID>` — versioned bucket for Terraform state |
+| `aws_s3_bucket` | only in the deprecated fallback: `np-service-<SERVICE_ID>`, a versioned bucket for Terraform state |
 | `postgresql_database` | One per link — isolated database per application link |
 | `postgresql_role` | One per link — isolated PostgreSQL user per application link |
 
@@ -144,7 +144,7 @@ The agent executing this service needs the following IAM permissions (see `specs
 - **RDS**: `CreateDBInstance`, `DeleteDBInstance`, `ModifyDBInstance`, `DescribeDBInstances`, subnet group management, tagging
 - **EC2**: Security group management, `DescribeVpcs`, `DescribeSubnets`
 - **Secrets Manager**: Full lifecycle (`CreateSecret`, `DeleteSecret`, `GetSecretValue`, `PutSecretValue`, etc.)
-- **S3**: Full lifecycle on the `np-service-<SERVICE_ID>` bucket
+- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else
 - **IAM**: `CreateServiceLinkedRole` (for RDS)
 
 The `requirements/` Terraform module creates a dedicated IAM role
@@ -287,4 +287,19 @@ All RDS instances are created with `storage_encrypted = true` using the default 
 
 ### Terraform State
 
-Terraform state is stored in an S3 bucket named `np-service-<SERVICE_ID>` with versioning enabled. This bucket is created before provisioning and deleted (including all versions) after the RDS instance is destroyed.
+Set `RDS_POSTGRES_S3_STATE_BUCKET` on the agent to the name of an existing S3 bucket and every service instance keeps its Terraform state there under `services/rds-postgres/<service-id>/`. Both packages share the bucket; the service id keeps their keys apart. Deleting a service removes only its own prefix and never touches the bucket.
+
+The bucket must already exist — the service does not create it, and any name works. Pass it as `state_bucket_name` to the `specs/requirements/aws` module, which grants the role access to that bucket and nothing else.
+
+`RDS_POSTGRES_S3_STATE_BUCKET` is required. Without it every action fails before touching AWS.
+
+Earlier versions created one bucket per instance (`np-service-<service-id>`) and deleted it with the service. That is gone. **Instances provisioned by those versions must have their state moved before the next action runs**, or tofu will start from an empty state and try to create infrastructure that already exists:
+
+```bash
+aws s3 cp --recursive "s3://np-service-<service-id>/" \
+                      "s3://<shared-bucket>/services/rds-postgres/<service-id>/"
+aws s3 rb "s3://np-service-<service-id>" --force
+```
+
+The old bucket can go once the copy is verified.
+

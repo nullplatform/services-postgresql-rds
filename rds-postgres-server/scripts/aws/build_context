@@ -100,30 +100,29 @@ fi
 
 echo "Using VPC: ${VPC_ID}"
 
-# --- Ensure per-instance tfstate bucket exists ------------------------------
-# Each service instance gets its own S3 bucket so state is isolated and the
-# bucket name is deterministic (reconstructable from SERVICE_ID alone).
-# The agent IAM role must allow s3:CreateBucket + s3:PutBucketVersioning
-# on arn:aws:s3:::np-service-* and the usual Get/Put/Delete/List actions.
+# --- Resolve where the tofu state lives -------------------------------------
+# RDS_POSTGRES_S3_STATE_BUCKET names an existing bucket holding the state of every
+# service instance, each under its own key prefix. The service never creates
+# buckets and assumes nothing about the bucket's name.
 
-TFSTATE_BUCKET="np-service-${SERVICE_ID}"
-
-if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
-  echo "Creating tfstate bucket: ${TFSTATE_BUCKET}"
-  if [ "$REGION" = "us-east-1" ]; then
-    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
-  else
-    aws s3api create-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" \
-      --create-bucket-configuration LocationConstraint="$REGION"
-  fi
-  aws s3api put-bucket-versioning --bucket "$TFSTATE_BUCKET" \
-    --versioning-configuration Status=Enabled
-  echo "Bucket ${TFSTATE_BUCKET} created with versioning enabled."
-else
-  echo "Using existing tfstate bucket: ${TFSTATE_BUCKET}"
+if [ -z "${RDS_POSTGRES_S3_STATE_BUCKET:-}" ]; then
+  echo "ERROR: RDS_POSTGRES_S3_STATE_BUCKET is not set." >&2
+  echo "       Set it on the agent to the name of an existing S3 bucket that holds" >&2
+  echo "       the tofu state for every instance of this service." >&2
+  exit 1
 fi
 
-export TFSTATE_BUCKET
+TFSTATE_BUCKET="$RDS_POSTGRES_S3_STATE_BUCKET"
+TFSTATE_KEY_PREFIX="services/rds-postgres/${SERVICE_ID}/"
+
+if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" >/dev/null 2>&1; then
+  echo "ERROR: the state bucket ${TFSTATE_BUCKET} does not exist or is not reachable from ${REGION}." >&2
+  exit 1
+fi
+
+echo "Using state bucket: ${TFSTATE_BUCKET} (prefix ${TFSTATE_KEY_PREFIX})"
+
+export TFSTATE_BUCKET TFSTATE_KEY_PREFIX
 
 # --- Set Terraform execution variables --------------------------------------
 
@@ -132,7 +131,7 @@ mkdir -p "$OUTPUT_DIR"
 
 export TOFU_MODULE_DIR="$SERVICE_PATH/deployment"
 
-export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=terraform.tfstate -backend-config=region=${REGION}"
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=${TFSTATE_KEY_PREFIX}terraform.tfstate -backend-config=region=${REGION}"
 
 TOFU_VARIABLES="-var=service_id=${SERVICE_ID} -var=instance_name=${INSTANCE_NAME} -var=region=${REGION} -var=vpc_id=${VPC_ID} -var=instance_class=${INSTANCE_CLASS} -var=allocated_storage=${ALLOCATED_STORAGE} -var=postgres_version=${POSTGRES_VERSION}"
 
