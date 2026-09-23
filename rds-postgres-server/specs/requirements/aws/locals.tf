@@ -13,7 +13,9 @@ locals {
 }
 
 locals {
-  shared_state_statements = var.state_bucket_name == "" ? [] : [
+  # Access to the state bucket the operator names. Nothing here assumes a bucket
+  # naming convention: the role is granted on that bucket and nothing else.
+  shared_state_statements = [
     {
       "Effect" : "Allow",
       "Action" : ["s3:ListBucket", "s3:ListBucketVersions", "s3:GetBucketLocation"],
@@ -31,4 +33,29 @@ locals {
       "Resource" : ["arn:aws:s3:::${var.state_bucket_name}/*"]
     },
   ]
+
+  # The deprecated bucket-per-instance layout, off unless an operator is still
+  # migrating instances off it.
+  legacy_state_statements = var.grant_legacy_per_instance_buckets ? [
+    {
+      "Effect" : "Allow",
+      "Action" : [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:PutBucketVersioning",
+        "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource" : [
+        "arn:aws:s3:::np-service-*",
+        "arn:aws:s3:::np-service-*/*"
+      ]
+    },
+  ] : []
 }

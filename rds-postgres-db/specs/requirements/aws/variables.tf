@@ -50,7 +50,17 @@ variable "iam_resource_tags_json" {
 }
 
 variable "state_bucket_name" {
-  description = "Name of an existing S3 bucket holding the tofu state for every service instance, each under its own key prefix. The agent receives it as RDS_S3_STATE_BUCKET. Leave empty to keep the deprecated bucket-per-instance behaviour."
+  description = "Name of the existing S3 bucket holding the tofu state for every service instance, each under its own key prefix. Any bucket works — the module grants the role access to this one and assumes no naming convention. The agent receives the same name as RDS_S3_STATE_BUCKET."
   type        = string
-  default     = ""
+
+  validation {
+    condition     = length(var.state_bucket_name) > 0
+    error_message = "state_bucket_name must name an existing S3 bucket."
+  }
+}
+
+variable "grant_legacy_per_instance_buckets" {
+  description = "Also grant the role access to np-service-* buckets, the deprecated layout where each service instance created and deleted its own bucket. Only needed while migrating existing instances onto the shared bucket."
+  type        = bool
+  default     = false
 }

@@ -144,7 +144,7 @@ The agent executing this service needs the following IAM permissions (see `specs
 - **RDS**: `CreateDBInstance`, `DeleteDBInstance`, `ModifyDBInstance`, `DescribeDBInstances`, subnet group management, tagging
 - **EC2**: Security group management, `DescribeVpcs`, `DescribeSubnets`
 - **Secrets Manager**: Full lifecycle (`CreateSecret`, `DeleteSecret`, `GetSecretValue`, `PutSecretValue`, etc.)
-- **S3**: read/write on the shared state bucket named by `RDS_S3_STATE_BUCKET`, plus full lifecycle on `np-service-*` while the deprecated per-instance fallback is still supported
+- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else unless `grant_legacy_per_instance_buckets` is turned on
 - **IAM**: `CreateServiceLinkedRole` (for RDS)
 
 The `requirements/` Terraform module creates a dedicated IAM role
@@ -289,9 +289,9 @@ All RDS instances are created with `storage_encrypted = true` using the default 
 
 Set `RDS_S3_STATE_BUCKET` on the agent to the name of an existing S3 bucket and every service instance keeps its Terraform state there under `services/<service-id>/`. Both packages share the bucket; the service id keeps their keys apart. Deleting a service removes only its own prefix and never touches the bucket.
 
-The bucket must already exist — the service does not create it. Grant the permissions role access to it by passing `state_bucket_name` to the `specs/requirements/aws` module.
+The bucket must already exist — the service does not create it, and any name works. Pass it as `state_bucket_name` to the `specs/requirements/aws` module, which grants the role access to that bucket and nothing else.
 
-Leaving `RDS_S3_STATE_BUCKET` unset falls back to creating one bucket per instance (`np-service-<service-id>`), which is **deprecated** and logs a warning on every run. To move an existing instance:
+Leaving `RDS_S3_STATE_BUCKET` unset falls back to creating one bucket per instance (`np-service-<service-id>`), which is **deprecated** and logs a warning on every run. The role is not granted access to those buckets unless you also set `grant_legacy_per_instance_buckets = true`, so set it while migrating and drop it once you are done. To move an existing instance:
 
 ```bash
 aws s3 cp --recursive "s3://np-service-<service-id>/" \
