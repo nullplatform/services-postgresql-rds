@@ -8,7 +8,7 @@ set -uo pipefail
 
 PACKAGE="${1:-rds-postgres-db}"
 BUILD_CONTEXT="${PACKAGE}/scripts/aws/build_context"
-DELETE_STATE="${PACKAGE}/scripts/aws/delete_tfstate_bucket"
+DELETE_STATE="${PACKAGE}/scripts/aws/delete_tfstate_objects"
 BUCKET_VAR="RDS_S3_STATE_BUCKET"
 SERVICE_ID="11111111-2222-3333-4444-555555555555"
 PASS=0
@@ -203,56 +203,45 @@ out="$(run_build_context set "")"
 rc=$?
 err="$(cat "$SANDBOX/err.log" 2>/dev/null)"
 if [ "$rc" -ne 0 ]; then
-	check "treats set-but-empty as a config error" "ok"
+	check "rejects an empty bucket name" "ok"
 else
-	check "treats set-but-empty as a config error" "bad" "rc=$rc bucket='$(field "$out" TFSTATE_BUCKET)'"
+	check "rejects an empty bucket name" "bad" "rc=$rc bucket='$(field "$out" TFSTATE_BUCKET)'"
 fi
-if echo "$err" | grep -q 'set but empty'; then
-	check "names the empty variable" "ok"
+if echo "$err" | grep -q 'is not set'; then
+	check "names the variable to set" "ok"
 else
-	check "names the empty variable" "bad" "stderr: $(echo "$err" | tr '\n' '|')"
+	check "names the variable to set" "bad" "stderr: $(echo "$err" | tr '\n' '|')"
 fi
 if grep -q 'create-bucket' "$SANDBOX/aws.log"; then
-	check "does not silently use the deprecated path" "bad" "$(grep create-bucket "$SANDBOX/aws.log" | head -1)"
+	check "never creates a bucket" "bad" "$(grep create-bucket "$SANDBOX/aws.log" | head -1)"
 else
-	check "does not silently use the deprecated path" "ok"
+	check "never creates a bucket" "ok"
 fi
 teardown_sandbox
 
-echo "=== bucket variable unset: deprecated per-instance bucket ==="
+echo "=== bucket variable unset ==="
 setup_sandbox
 out="$(run_build_context unset)"
+rc=$?
 err="$(cat "$SANDBOX/err.log" 2>/dev/null)"
-if [ "$(field "$out" TFSTATE_BUCKET)" = "np-service-${SERVICE_ID}" ]; then
-	check "falls back to the per-instance bucket" "ok"
+if [ "$rc" -ne 0 ]; then
+	check "aborts when no bucket is configured" "ok"
 else
-	check "falls back to the per-instance bucket" "bad" "got '$(field "$out" TFSTATE_BUCKET)'"
-fi
-if [ -z "$(field "$out" TFSTATE_KEY_PREFIX)" ]; then
-	check "leaves the key prefix empty" "ok"
-else
-	check "leaves the key prefix empty" "bad" "got '$(field "$out" TFSTATE_KEY_PREFIX)'"
-fi
-if ! grep -q 'TOFU_INIT_VARIABLES=' "$BUILD_CONTEXT"; then
-	echo "  SKIP: keeps the legacy backend key unchanged (this package builds it in a later step)"
-elif field "$out" TOFU_INIT_VARIABLES | grep -qF -- "-backend-config=key=terraform.tfstate"; then
-	check "keeps the legacy backend key unchanged" "ok"
-else
-	check "keeps the legacy backend key unchanged" "bad" "got '$(field "$out" TOFU_INIT_VARIABLES)'"
+	check "aborts when no bucket is configured" "bad" "rc=$rc bucket='$(field "$out" TFSTATE_BUCKET)'"
 fi
 if grep -q 'create-bucket' "$SANDBOX/aws.log"; then
-	check "creates the bucket it owns" "ok"
+	check "never falls back to creating a bucket" "bad" "$(grep create-bucket "$SANDBOX/aws.log" | head -1)"
 else
-	check "creates the bucket it owns" "bad" "$(tr '\n' '|' < "$SANDBOX/aws.log")"
+	check "never falls back to creating a bucket" "ok"
 fi
-if echo "$err" | grep -qi 'deprecated'; then
-	check "warns that the fallback is deprecated" "ok"
+if echo "$err" | grep -q 'RDS_S3_STATE_BUCKET'; then
+	check "names the variable to set" "ok"
 else
-	check "warns that the fallback is deprecated" "bad" "stderr: $(echo "$err" | tr '\n' '|')"
+	check "names the variable to set" "bad" "stderr: $(echo "$err" | tr '\n' '|')"
 fi
 teardown_sandbox
 
-echo "=== delete: shared bucket keeps the bucket, empties the prefix ==="
+echo "=== delete: empties only this prefix ==="
 setup_sandbox state-bucket
 out="$(run_delete_state set shared-state "services/${SERVICE_ID}/")"
 if grep -q -- "--prefix services/${SERVICE_ID}/" "$SANDBOX/aws.log"; then
@@ -261,23 +250,13 @@ else
 	check "scopes the listing to its own prefix" "bad" "$(tr '\n' '|' < "$SANDBOX/aws.log")"
 fi
 if grep -q 'delete-bucket' "$SANDBOX/aws.log"; then
-	check "never deletes the shared bucket" "bad" "$(grep delete-bucket "$SANDBOX/aws.log" | head -1)"
+	check "never deletes the bucket" "bad" "$(grep delete-bucket "$SANDBOX/aws.log" | head -1)"
 else
-	check "never deletes the shared bucket" "ok"
+	check "never deletes the bucket" "ok"
 fi
 teardown_sandbox
 
-echo "=== delete: legacy per-instance bucket is removed ==="
-setup_sandbox state-bucket
-out="$(run_delete_state unset "" "")"
-if grep -q 'delete-bucket' "$SANDBOX/aws.log"; then
-	check "deletes the bucket it owns" "ok"
-else
-	check "deletes the bucket it owns" "bad" "$(tr '\n' '|' < "$SANDBOX/aws.log")"
-fi
-teardown_sandbox
-
-echo "=== delete: shared bucket with an empty prefix is refused ==="
+echo "=== delete: an empty prefix is refused ==="
 setup_sandbox state-bucket
 out="$(run_delete_state set shared-state "")"
 rc=$?
@@ -301,7 +280,7 @@ teardown_sandbox
 echo "=== both packages resolve state the same way ==="
 extract_block() {
 	# shellcheck disable=SC2016
-	sed -n '/^if \[ -n "${RDS_S3_STATE_BUCKET+set}" \]; then$/,/^export TFSTATE_BUCKET TFSTATE_KEY_PREFIX$/p' "$1"
+	sed -n '/^if \[ -z "${RDS_S3_STATE_BUCKET:-}" \]; then$/,/^export TFSTATE_BUCKET TFSTATE_KEY_PREFIX$/p' "$1"
 }
 ROOT="$(cd "$(dirname "$BUILD_CONTEXT")/../../.." && pwd)"
 BLOCK_DB="$(extract_block "$ROOT/rds-postgres-db/scripts/aws/build_context")"
@@ -317,7 +296,7 @@ fi
 echo "=== every backend key is scoped to the instance ==="
 # shellcheck disable=SC2016
 UNPREFIXED="$(grep -rn 'backend-config=key=' "$ROOT"/rds-postgres-*/scripts/aws/ \
-	| grep -v 'backend-config=key=\${TFSTATE_KEY_PREFIX' || true)"
+	| grep -v 'backend-config=key=\${TFSTATE_KEY_PREFIX}' || true)"
 if [ -z "$UNPREFIXED" ]; then
 	check "no backend key is written to the bucket root" "ok"
 else

@@ -62,6 +62,6 @@ steps:
       # potential future use.
       TOFU_TARGETS: "postgresql_role.app_user,random_password.user,aws_secretsmanager_secret_version.app,aws_secretsmanager_secret.app"
 
-  - name: cleanup tfstate bucket
+  - name: cleanup tfstate objects
     type: script
-    file: $SERVICE_PATH/scripts/aws/delete_tfstate_bucket
+    file: $SERVICE_PATH/scripts/aws/delete_tfstate_objects

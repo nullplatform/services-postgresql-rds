@@ -58,9 +58,3 @@ variable "state_bucket_name" {
     error_message = "state_bucket_name must name an existing S3 bucket."
   }
 }
-
-variable "grant_legacy_per_instance_buckets" {
-  description = "Also grant the role access to np-service-* buckets, the deprecated layout where each service instance created and deleted its own bucket. Only needed while migrating existing instances onto the shared bucket."
-  type        = bool
-  default     = false
-}

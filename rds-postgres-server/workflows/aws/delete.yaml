@@ -37,6 +37,6 @@ steps:
     configuration:
       TOFU_ACTION: destroy
 
-  - name: cleanup tfstate bucket
+  - name: cleanup tfstate objects
     type: script
-    file: $SERVICE_PATH/scripts/aws/delete_tfstate_bucket
+    file: $SERVICE_PATH/scripts/aws/delete_tfstate_objects

@@ -141,14 +141,11 @@ resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
   count = local.iam_create ? 1 : 0
 
   name        = "${local.policies_name_prefix}-rds-s3-policy"
-  description = "Policy for managing per-service S3 tfstate buckets (np-service-*)"
+  description = "Access to the S3 bucket holding the tofu state for this service"
 
   policy = jsonencode({
     "Version" : "2012-10-17",
-    "Statement" : concat(
-      local.shared_state_statements,
-      local.legacy_state_statements,
-    )
+    "Statement" : local.shared_state_statements
   })
 }
 

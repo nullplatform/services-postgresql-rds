@@ -1,0 +1,71 @@
+#!/bin/bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# delete_tfstate_objects — Removes this instance's tofu state after destroy has
+# run and the state file is no longer needed. The bucket holds every other
+# instance's state too, so only this instance's key prefix is emptied.
+#
+# Expected environment variables (exported by build_context):
+#   TFSTATE_BUCKET     — bucket holding the state
+#   TFSTATE_KEY_PREFIX — this instance's prefix
+# ---------------------------------------------------------------------------
+
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+
+if [ -z "${TFSTATE_BUCKET:-}" ]; then
+  echo "ERROR: TFSTATE_BUCKET is not set. Expected to be exported by build_context." >&2
+  exit 1
+fi
+
+if [ -z "${TFSTATE_KEY_PREFIX:-}" ]; then
+  echo "ERROR: TFSTATE_KEY_PREFIX is empty." >&2
+  echo "       Refusing to continue: this would delete every service's state." >&2
+  exit 1
+fi
+
+delete_objects() {
+  local query="$1"
+  local label="$2"
+  local objects
+  local rc=0
+
+  objects=$(aws s3api list-object-versions \
+    --bucket "$TFSTATE_BUCKET" \
+    --region "$REGION" \
+    --prefix "$TFSTATE_KEY_PREFIX" \
+    --query "${query}" \
+    --output json) || rc=$?
+
+  if [ "$rc" -ne 0 ]; then
+    echo "WARNING: list-object-versions failed (exit $rc) for ${label}, skipping."
+    return 0
+  fi
+
+  if [ "$objects" = "null" ] || [ -z "$objects" ] || [ "$objects" = "[]" ]; then
+    echo "No ${label} to delete."
+    return 0
+  fi
+
+  echo "Deleting ${label}..."
+  local tmpfile
+  tmpfile=$(mktemp)
+  printf '{"Objects": %s, "Quiet": true}' "$objects" > "$tmpfile"
+  aws s3api delete-objects \
+    --bucket "$TFSTATE_BUCKET" \
+    --region "$REGION" \
+    --delete "file://${tmpfile}"
+  rm -f "$tmpfile"
+}
+
+delete_objects 'Versions[].{Key:Key,VersionId:VersionId}' "object versions"
+delete_objects 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' "delete markers"
+
+echo "Removed tofu state under s3://${TFSTATE_BUCKET}/${TFSTATE_KEY_PREFIX}"

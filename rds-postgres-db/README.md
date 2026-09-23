@@ -134,7 +134,9 @@ Set `RDS_S3_STATE_BUCKET` on the agent to the name of an existing S3 bucket and 
 
 The bucket must already exist — the service does not create it, and any name works. Pass it as `state_bucket_name` to the `specs/requirements/aws` module, which grants the role access to that bucket and nothing else.
 
-Leaving `RDS_S3_STATE_BUCKET` unset falls back to creating one bucket per instance (`np-service-<service-id>`), which is **deprecated** and logs a warning on every run. The role is not granted access to those buckets unless you also set `grant_legacy_per_instance_buckets = true`, so set it while migrating and drop it once you are done. To move an existing instance:
+`RDS_S3_STATE_BUCKET` is required. Without it every action fails before touching AWS.
+
+Earlier versions created one bucket per instance (`np-service-<service-id>`) and deleted it with the service. That is gone. **Instances provisioned by those versions must have their state moved before the next action runs**, or tofu will start from an empty state and try to create infrastructure that already exists:
 
 ```bash
 aws s3 cp --recursive "s3://np-service-<service-id>/" \
@@ -142,7 +144,7 @@ aws s3 cp --recursive "s3://np-service-<service-id>/" \
 aws s3 rb "s3://np-service-<service-id>" --force
 ```
 
-Copy the state before the next action runs. An action that finds no state at the new prefix will try to create infrastructure that already exists.
+The old bucket can go once the copy is verified.
 
 No RDS or EC2 permissions are needed.
 

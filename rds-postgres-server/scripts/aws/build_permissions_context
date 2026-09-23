@@ -39,7 +39,6 @@ fi
 
 # --- Read service outputs (set by write_service_outputs after RDS creation) -
 
-SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
 ACTION_TYPE=$(echo "$CONTEXT" | jq -r '.type // ""')
 SERVICE_ATTRS=$(echo "$CONTEXT" | jq -r '.service.attributes // {}')
 
@@ -106,6 +105,6 @@ EOF
 
 export TOFU_MODULE_DIR="$SERVICE_PATH/permissions"
 
-export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=${TFSTATE_KEY_PREFIX:-services/rds-postgres/${SERVICE_ID}/}links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=${TFSTATE_KEY_PREFIX}links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
 
 export TOFU_VARIABLES="-var=link_id=${LINK_ID} -var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME} -var=db_username=${DB_USERNAME} -var=master_username=${MASTER_USER} -var=access_level=${LINK_ACCESS_LEVEL:-read-write}"
