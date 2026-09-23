@@ -128,7 +128,7 @@ No RDS, EC2, or VPC resources are created — those belong to the auto-discovere
 This service requires fewer AWS permissions than `rds-postgres-server` (no RDS/EC2), but it does manage its own Secrets Manager secret. The agent needs:
 
 - **Secrets Manager**: `GetSecretValue` — to retrieve the master PostgreSQL password from the ARN stored in service attributes; plus `CreateSecret`, `PutSecretValue`, `UpdateSecret`, `DeleteSecret`, `DescribeSecret`, `TagResource`, `UntagResource`, `GetResourcePolicy`, `ListSecretVersionIds` — to create, update, and delete the app-level credentials secret this service owns
-- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else unless `grant_legacy_per_instance_buckets` is turned on
+- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else
 
 Set `RDS_S3_STATE_BUCKET` on the agent to the name of an existing S3 bucket and every service instance keeps its Terraform state there under `services/<service-id>/`. Both packages share the bucket; the service id keeps their keys apart. Deleting a service removes only its own prefix and never touches the bucket.
 

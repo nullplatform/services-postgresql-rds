@@ -144,7 +144,7 @@ The agent executing this service needs the following IAM permissions (see `specs
 - **RDS**: `CreateDBInstance`, `DeleteDBInstance`, `ModifyDBInstance`, `DescribeDBInstances`, subnet group management, tagging
 - **EC2**: Security group management, `DescribeVpcs`, `DescribeSubnets`
 - **Secrets Manager**: Full lifecycle (`CreateSecret`, `DeleteSecret`, `GetSecretValue`, `PutSecretValue`, etc.)
-- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else unless `grant_legacy_per_instance_buckets` is turned on
+- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else
 - **IAM**: `CreateServiceLinkedRole` (for RDS)
 
 The `requirements/` Terraform module creates a dedicated IAM role
