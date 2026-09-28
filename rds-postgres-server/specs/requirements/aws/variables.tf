@@ -58,3 +58,9 @@ variable "state_bucket_name" {
     error_message = "state_bucket_name must name an existing S3 bucket."
   }
 }
+
+variable "external_kms_key_arns" {
+  description = "ARNs of existing KMS keys the agent may pass as RDS_POSTGRES_KMS_KEY_ARN. The role gets DescribeKey and CreateGrant on these keys only."
+  type        = list(string)
+  default     = []
+}
