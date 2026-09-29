@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.3.1...v0.4.0) (2026-09-29)
+
+
+### Features
+
+* encrypt new instances with an existing kms key from RDS_POSTGRES_KMS_KEY_ARN ([ddfc6ea](https://github.com/nullplatform/services-postgresql-rds/commit/ddfc6ea2e1e73deb4fdecd1addee26df8771cc2a))
+* encrypt new instances with an existing kms key from RDS_POSTGRES_KMS_KEY_ARN ([02470f1](https://github.com/nullplatform/services-postgresql-rds/commit/02470f103311d2ad7cc5d58c17d75c570c758a86))
+
 ## [0.3.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.3.0...v0.3.1) (2026-09-23)
 
 
