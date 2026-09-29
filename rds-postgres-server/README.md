@@ -283,7 +283,9 @@ The master password secret is deleted immediately on service destroy (`recovery_
 
 ### Storage Encryption
 
-All RDS instances are created with `storage_encrypted = true` using the default AWS-managed key.
+All RDS instances are created with `storage_encrypted = true`. By default each instance gets its own customer-managed KMS key.
+
+Set `RDS_POSTGRES_KMS_KEY_ARN` on the agent to encrypt new instances with an existing key instead; no key is created then. The variable only applies while the tofu state has no instance yet: once it exists, its key comes from the state, so setting or changing the variable later never re-encrypts (and so never replaces) an existing instance. List the key in `external_kms_key_arns` of `specs/requirements/aws` so the role can use it.
 
 ### Terraform State
 
