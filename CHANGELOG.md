@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.1...v0.4.2) (2026-10-01)
+
+
+### Bug Fixes
+
+* resolve region and vpc providers by entity nrn and service dimensions ([0468dad](https://github.com/nullplatform/services-postgresql-rds/commit/0468dad1644271b317eda7b54d894dbd9908079b))
+
 ## [0.4.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.0...v0.4.1) (2026-10-01)
 
 
