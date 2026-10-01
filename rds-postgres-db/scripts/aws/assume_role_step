@@ -34,11 +34,11 @@ source "$SCRIPT_DIR/assume_role_lib"
 
 RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR="${RDS_POSTGRES_DB_ASSUME_ROLE_SELECTOR:-rds-postgres-db}"
 
-# NRN of the service from CONTEXT (falls back to scope / generic event). Use the
+# NRN of the entity from CONTEXT (.entity_nrn, then .service.nrn / .scope.nrn). Use the
 # full NRN as-is — do NOT strip it. Resolution walks UP the NRN hierarchy, so the
 # identity-access-control provider (registered at account level) is found via the
 # --categories query below regardless of the depth the service runs at.
-NRN=$(echo "${CONTEXT:-}" | jq -r '.service.nrn // .scope.nrn // .entity_nrn // ""' 2>/dev/null)
+NRN=$(echo "${CONTEXT:-}" | jq -r '.entity_nrn // .service.nrn // .scope.nrn // ""' 2>/dev/null)
 
 # Dimensions (if any) as key:value,key:value — lets np resolve the
 # most-specific IAM provider the same way it would for a k8s scope.

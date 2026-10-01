@@ -48,10 +48,10 @@ fi
 
 # --- Resolve AWS context from nullplatform provider -------------------------
 
-SERVICE_NRN=$(echo "$CONTEXT" | jq -r '.service.nrn // .entity_nrn // ""')
+ENTITY_NRN=$(echo "$CONTEXT" | jq -r '.entity_nrn // .service.nrn // ""')
 
-if [ -z "$SERVICE_NRN" ]; then
-  echo "ERROR: could not read the service NRN from .service.nrn or .entity_nrn in context" >&2
+if [ -z "$ENTITY_NRN" ]; then
+  echo "ERROR: could not read the service NRN from .entity_nrn or .service.nrn in context" >&2
   exit 1
 fi
 
@@ -72,22 +72,22 @@ provider_attributes() {
 }
 fi
 
-echo "Resolving region and VPC for ${SERVICE_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}"
+echo "Resolving region and VPC for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}"
 
-REGION=$(provider_attributes "cloud-providers" "$SERVICE_NRN" "$DIMENSIONS" | jq -r '.account.region // ""')
+REGION=$(provider_attributes "cloud-providers" "$ENTITY_NRN" "$DIMENSIONS" | jq -r '.account.region // ""')
 
 if [ -z "$REGION" ]; then
-  echo "ERROR: no cloud-providers provider with account.region found for ${SERVICE_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
+  echo "ERROR: no cloud-providers provider with account.region found for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
   exit 1
 fi
 
 echo "Using region: ${REGION}"
 export REGION
 
-VPC_ID=$(provider_attributes "vpc" "$SERVICE_NRN" "$DIMENSIONS" | jq -r '.vpc.id // ""')
+VPC_ID=$(provider_attributes "vpc" "$ENTITY_NRN" "$DIMENSIONS" | jq -r '.vpc.id // ""')
 
 if [ -z "$VPC_ID" ]; then
-  echo "ERROR: no vpc provider with vpc.id found for ${SERVICE_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
+  echo "ERROR: no vpc provider with vpc.id found for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
   exit 1
 fi
 

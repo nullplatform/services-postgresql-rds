@@ -104,10 +104,10 @@ else
 fi
 
 calls=$(grep -c -- "provider list --nrn ${SERVICE_NRN} --categories cloud-providers --dimensions environment:prod" "$SANDBOX/np.log")
-check "the region is looked up by service nrn, category and dimensions" "$([ "$calls" = "1" ] && echo ok)" "$(cat "$SANDBOX/np.log")"
+check "the region is looked up by entity nrn, category and dimensions" "$([ "$calls" = "1" ] && echo ok)" "$(cat "$SANDBOX/np.log")"
 
 calls=$(grep -c -- "provider list --nrn ${SERVICE_NRN} --categories vpc --dimensions environment:prod" "$SANDBOX/np.log")
-check "the vpc is looked up by service nrn, category and dimensions" "$([ "$calls" = "1" ] && echo ok)" "$(cat "$SANDBOX/np.log")"
+check "the vpc is looked up by entity nrn, category and dimensions" "$([ "$calls" = "1" ] && echo ok)" "$(cat "$SANDBOX/np.log")"
 
 out=$(tofu_variables_for "$(context_with "$SERVICE_NRN" '{}')")
 if [[ "$out" == *"-var=vpc_id=vpc-default "* ]] && ! grep -q -- "--dimensions" "$SANDBOX/np.log"; then
@@ -123,13 +123,14 @@ else
 	check "a missing provider stops before tofu" fail "$out"
 fi
 
-LINK_CONTEXT=$(jq -nc --arg id "$SERVICE_ID" --arg nrn "$SERVICE_NRN" \
-	'{type: "create", entity_nrn: "organization=9:account=8:namespace=7:application=6", service: {id: $id, name: "orders", nrn: $nrn, attributes: {}}, link: {id: "l1"}, parameters: {}}')
+LINK_NRN="${ACCOUNT_NRN}:namespace=3:application=9"
+LINK_CONTEXT=$(jq -nc --arg id "$SERVICE_ID" --arg nrn "$SERVICE_NRN" --arg link_nrn "$LINK_NRN" \
+	'{type: "create", entity_nrn: $link_nrn, service: {id: $id, name: "orders", nrn: $nrn, attributes: {}}, link: {id: "l1"}, parameters: {}}')
 out=$(tofu_variables_for "$LINK_CONTEXT")
-if [[ "$out" == *"-var=vpc_id=vpc-default "* ]] && grep -q -- "--nrn ${SERVICE_NRN} " "$SANDBOX/np.log"; then
-	check "a link resolves providers from the service nrn, not the linking entity" ok
+if [[ "$out" == *"-var=vpc_id=vpc-default "* ]] && grep -q -- "--nrn ${LINK_NRN} " "$SANDBOX/np.log" && ! grep -q -- "--nrn ${SERVICE_NRN} " "$SANDBOX/np.log"; then
+	check "a link resolves providers from its entity nrn" ok
 else
-	check "a link resolves providers from the service nrn, not the linking entity" fail "$out $(cat "$SANDBOX/np.log")"
+	check "a link resolves providers from its entity nrn" fail "$out $(cat "$SANDBOX/np.log")"
 fi
 
 jq -n '{version: 4, resources: [
