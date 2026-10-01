@@ -60,8 +60,8 @@ if [ -z "\$category" ] || [[ "\$nrn" != "${ACCOUNT_NRN}"* ]]; then
 fi
 case "\$category:\$dimensions" in
   cloud-providers:*) echo '{"results":[{"attributes":{"account":{"region":"sa-east-1"}}}]}' ;;
-  vpc:environment:prod) echo '{"results":[{"attributes":{"vpc":{"id":"vpc-prod"}}}]}' ;;
-  vpc:*) echo '{"results":[{"attributes":{"vpc":{"id":"vpc-default"}}}]}' ;;
+  vpc:environment:prod) echo '{"results":[{"attributes":{"vpc":{"id":"vpc-prod","subnets":["subnet-prod-a","subnet-prod-b"]}}}]}' ;;
+  vpc:*) echo "{\"results\":[{\"attributes\":{\"vpc\":{\"id\":\"vpc-default\",\"subnets\":\${FAKE_SUBNETS:-[\"subnet-a\",\"subnet-b\"]}}}}]}" ;;
   *) echo '{"results":[]}' ;;
 esac
 EOS
@@ -142,6 +142,47 @@ if [[ "$out" == *"-var=vpc_id=vpc-original "* ]] && [[ "$out" == *"-var=region=u
 	check "an existing instance keeps the vpc and region in its state" ok
 else
 	check "an existing instance keeps the vpc and region in its state" fail "$out $(cat "$SANDBOX/err.log")"
+fi
+
+NETWORK_TFVARS="/tmp/np-service-${SERVICE_ID}/network.auto.tfvars.json"
+
+tofu_variables_for "$(context_with "$SERVICE_NRN" '{"environment":"prod"}')" >/dev/null
+subnets=$(jq -c '.subnet_ids' "$NETWORK_TFVARS" 2>/dev/null)
+check "the vpc provider subnets reach tofu through an auto tfvars file" "$([ "$subnets" = '["subnet-prod-a","subnet-prod-b"]' ] && echo ok)" "got '$subnets'"
+
+out=$(FAKE_SUBNETS='[]' tofu_variables_for "$(context_with "$SERVICE_NRN" '{}')")
+if [[ -z "$out" ]] && grep -q "has no vpc.subnets" "$SANDBOX/err.log"; then
+	check "a vpc provider without subnets stops before tofu" ok
+else
+	check "a vpc provider without subnets stops before tofu" fail "$out $(cat "$SANDBOX/err.log")"
+fi
+
+out=$(FAKE_SUBNETS='["subnet-a"]' tofu_variables_for "$(context_with "$SERVICE_NRN" '{}')")
+if [[ -z "$out" ]] && grep -q "needs at least two" "$SANDBOX/err.log"; then
+	check "a vpc provider with a single subnet stops before tofu" ok
+else
+	check "a vpc provider with a single subnet stops before tofu" fail "$out $(cat "$SANDBOX/err.log")"
+fi
+
+jq -n '{version: 4, resources: [
+	{mode: "managed", type: "aws_security_group", name: "rds", instances: [{attributes: {vpc_id: "vpc-prod"}}]},
+	{mode: "managed", type: "aws_db_subnet_group", name: "main", instances: [{attributes: {subnet_ids: ["subnet-old-2", "subnet-old-1"]}}]}]}' > "$SANDBOX/state.json"
+tofu_variables_for "$UPDATE_CONTEXT" "$SANDBOX/state.json" >/dev/null
+subnets=$(jq -c '.subnet_ids' "$NETWORK_TFVARS" 2>/dev/null)
+if [ "$subnets" = '["subnet-old-1","subnet-old-2"]' ] && grep -q "keeping them" "$SANDBOX/err.log"; then
+	check "an existing instance keeps the subnets in its state" ok
+else
+	check "an existing instance keeps the subnets in its state" fail "got '$subnets' $(cat "$SANDBOX/err.log")"
+fi
+
+jq -n '{version: 4, resources: [
+	{mode: "managed", type: "aws_security_group", name: "rds", instances: [{attributes: {vpc_id: "vpc-prod"}}]},
+	{mode: "managed", type: "aws_db_subnet_group", name: "main", instances: [{attributes: {subnet_ids: ["subnet-prod-b", "subnet-prod-a"]}}]}]}' > "$SANDBOX/state.json"
+tofu_variables_for "$UPDATE_CONTEXT" "$SANDBOX/state.json" >/dev/null
+if grep -q "WARNING" "$SANDBOX/err.log"; then
+	check "the same subnets in another order are not reported as a change" fail "$(cat "$SANDBOX/err.log")"
+else
+	check "the same subnets in another order are not reported as a change" ok
 fi
 
 rm -rf "${SANDBOX:?}" "/tmp/np-service-${SERVICE_ID:?}"

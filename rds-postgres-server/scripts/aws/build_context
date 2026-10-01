@@ -84,7 +84,9 @@ fi
 echo "Using region: ${REGION}"
 export REGION
 
-VPC_ID=$(provider_attributes "vpc" "$ENTITY_NRN" "$DIMENSIONS" | jq -r '.vpc.id // ""')
+VPC_ATTRIBUTES=$(provider_attributes "vpc" "$ENTITY_NRN" "$DIMENSIONS")
+VPC_ID=$(echo "$VPC_ATTRIBUTES" | jq -r '.vpc.id // ""')
+SUBNET_IDS=$(echo "$VPC_ATTRIBUTES" | jq -c '.vpc.subnets // []')
 
 if [ -z "$VPC_ID" ]; then
   echo "ERROR: no vpc provider with vpc.id found for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
@@ -92,6 +94,20 @@ if [ -z "$VPC_ID" ]; then
 fi
 
 echo "Using VPC: ${VPC_ID}"
+
+SUBNET_COUNT=$(echo "$SUBNET_IDS" | jq 'length')
+
+if [ "$SUBNET_COUNT" -eq 0 ]; then
+  echo "ERROR: the vpc provider for ${ENTITY_NRN} has no vpc.subnets; list the private subnets the database should use" >&2
+  exit 1
+fi
+
+if [ "$SUBNET_COUNT" -lt 2 ]; then
+  echo "ERROR: the vpc provider for ${ENTITY_NRN} lists ${SUBNET_COUNT} subnet in vpc.subnets; RDS needs at least two, in different availability zones" >&2
+  exit 1
+fi
+
+echo "Using subnets: ${SUBNET_IDS}"
 
 # --- Resolve where the tofu state lives -------------------------------------
 # RDS_POSTGRES_S3_STATE_BUCKET names an existing bucket holding the state of every
@@ -158,6 +174,13 @@ if [ "$STATE_STATUS" -eq 0 ]; then
     VPC_ID="$STATE_VPC_ID"
   fi
 
+  STATE_SUBNET_IDS=$(jq -c '[.resources[]? | select(.mode == "managed" and .type == "aws_db_subnet_group" and .name == "main")][0].instances[0].attributes.subnet_ids // [] | sort' "$OUTPUT_DIR/previous-state.json")
+
+  if [ "$STATE_SUBNET_IDS" != "[]" ] && [ "$STATE_SUBNET_IDS" != "$(echo "$SUBNET_IDS" | jq -c 'sort')" ]; then
+    echo "WARNING: the vpc provider resolves subnets ${SUBNET_IDS}, but this instance uses ${STATE_SUBNET_IDS}; keeping them so the instance is not replaced." >&2
+    SUBNET_IDS="$STATE_SUBNET_IDS"
+  fi
+
   if [ -n "$STATE_REGION" ] && [ "$STATE_REGION" != "$REGION" ]; then
     echo "WARNING: the cloud-providers provider resolves ${REGION}, but this instance lives in ${STATE_REGION}; keeping ${STATE_REGION}." >&2
     REGION="$STATE_REGION"
@@ -180,6 +203,8 @@ if [ -n "$KMS_KEY_ARN" ] && [[ ! "$KMS_KEY_ARN" =~ ^arn:aws[a-z-]*:kms:[a-z0-9-]
   echo "ERROR: '${KMS_KEY_ARN}' is not a KMS key ARN (arn:aws:kms:<region>:<account>:key/<id>)" >&2
   exit 1
 fi
+
+jq -n --argjson subnet_ids "$SUBNET_IDS" '{subnet_ids: $subnet_ids}' > "$OUTPUT_DIR/network.auto.tfvars.json"
 
 export TOFU_MODULE_DIR="$SERVICE_PATH/deployment"
 
