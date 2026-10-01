@@ -57,7 +57,7 @@ jobs:
       IMAGE: public.ecr.aws/nullplatform/services/rds-postgres-db
       TAG: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.existing_tag || needs.release.outputs.tag_name }}
       - uses: docker/setup-qemu-action@v3
