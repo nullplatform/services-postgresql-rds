@@ -47,55 +47,47 @@ if [ -n "${AWS_PROFILE_VAL}" ] && [ -z "${AWS_PROFILE:-}" ]; then
 fi
 
 # --- Resolve AWS context from nullplatform provider -------------------------
-# Both region and VPC are stored in runtime_configuration providers scoped to
-# the account. We derive the account NRN from the service NRN by stripping
-# everything from :namespace= onward, then query each provider by stored_keys.
 
-ACCOUNT_NRN=$(echo "$CONTEXT" | jq -r '.service.nrn // .entity_nrn // ""' | sed 's/:namespace=.*$//')
+ENTITY_NRN=$(echo "$CONTEXT" | jq -r '.entity_nrn // .service.nrn // ""')
 
-if [ -z "$ACCOUNT_NRN" ]; then
-  echo "ERROR: could not derive account NRN from .service.nrn in context" >&2
+if [ -z "$ENTITY_NRN" ]; then
+  echo "ERROR: could not read the service NRN from .entity_nrn or .service.nrn in context" >&2
   exit 1
 fi
 
-NP_PROVIDERS=$(np provider list --nrn "$ACCOUNT_NRN" --format json --limit 100)
+DIMENSIONS=$(echo "$CONTEXT" | jq -r '
+  if (.service.dimensions | type) == "object" and ((.service.dimensions | length) > 0)
+  then [ .service.dimensions | to_entries[] | "\(.key):\(.value)" ] | join(",")
+  else empty end')
 
-echo "Resolving region and VPC for account: ${ACCOUNT_NRN}"
-
-# Resolve region from the account provider (stored key: account.region)
-ACCOUNT_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
-  | jq -r '[(.results // [])[] | select((.data_source.stored_keys // []) | contains(["account.region"]))] | first | .id // ""')
-
-if [ -z "$ACCOUNT_PROVIDER_ID" ] || [ "$ACCOUNT_PROVIDER_ID" = "null" ]; then
-  echo "ERROR: no account provider with account.region found for ${ACCOUNT_NRN}" >&2
-  exit 1
+if ! type -t provider_attributes >/dev/null 2>&1; then
+provider_attributes() {
+  local category="$1" nrn="$2" dimensions="$3"
+  np provider list \
+    --nrn "$nrn" \
+    --categories "$category" \
+    ${dimensions:+--dimensions "$dimensions"} \
+    --format json \
+    | jq -c '(.results // [])[0].attributes // {}'
+}
 fi
 
-ACCOUNT_PROVIDER_DATA=$(np provider read --id "$ACCOUNT_PROVIDER_ID" --format json)
-REGION=$(echo "$ACCOUNT_PROVIDER_DATA" | jq -r '.attributes.account.region // ""')
+echo "Resolving region and VPC for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}"
+
+REGION=$(provider_attributes "cloud-providers" "$ENTITY_NRN" "$DIMENSIONS" | jq -r '.account.region // ""')
 
 if [ -z "$REGION" ]; then
-  echo "ERROR: account.region not found in provider ${ACCOUNT_PROVIDER_ID}" >&2
+  echo "ERROR: no cloud-providers provider with account.region found for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
   exit 1
 fi
 
 echo "Using region: ${REGION}"
 export REGION
 
-# Resolve VPC ID from the VPC provider (stored key: vpc.id)
-VPC_PROVIDER_ID=$(echo "$NP_PROVIDERS" \
-  | jq -r '[(.results // [])[] | select((.data_source.stored_keys // []) | contains(["vpc.id"]))] | first | .id // ""')
-
-if [ -z "$VPC_PROVIDER_ID" ] || [ "$VPC_PROVIDER_ID" = "null" ]; then
-  echo "ERROR: no VPC provider found for account ${ACCOUNT_NRN}" >&2
-  exit 1
-fi
-
-VPC_PROVIDER_DATA=$(np provider read --id "$VPC_PROVIDER_ID" --format json)
-VPC_ID=$(echo "$VPC_PROVIDER_DATA" | jq -r '.attributes.vpc.id // ""')
+VPC_ID=$(provider_attributes "vpc" "$ENTITY_NRN" "$DIMENSIONS" | jq -r '.vpc.id // ""')
 
 if [ -z "$VPC_ID" ]; then
-  echo "ERROR: vpc.id not found in provider ${VPC_PROVIDER_ID}" >&2
+  echo "ERROR: no vpc provider with vpc.id found for ${ENTITY_NRN}${DIMENSIONS:+ (dimensions: ${DIMENSIONS})}" >&2
   exit 1
 fi
 
@@ -155,6 +147,22 @@ STATE_KMS_KEY=$(kms_key_from_state "$TFSTATE_BUCKET" "${TFSTATE_KEY_PREFIX}terra
 if [ "$STATE_STATUS" -eq 1 ]; then
   echo "ERROR: could not read the tofu state at s3://${TFSTATE_BUCKET}/${TFSTATE_KEY_PREFIX}terraform.tfstate to find the instance's KMS key" >&2
   exit 1
+fi
+
+if [ "$STATE_STATUS" -eq 0 ]; then
+  STATE_VPC_ID=$(jq -r '[.resources[]? | select(.mode == "managed" and .type == "aws_security_group" and .name == "rds")][0].instances[0].attributes.vpc_id // ""' "$OUTPUT_DIR/previous-state.json")
+  STATE_REGION=$(jq -r '[.resources[]? | select(.mode == "managed" and .type == "aws_db_instance" and .name == "main")][0].instances[0].attributes.arn // "" | split(":") | .[3] // ""' "$OUTPUT_DIR/previous-state.json")
+
+  if [ -n "$STATE_VPC_ID" ] && [ "$STATE_VPC_ID" != "$VPC_ID" ]; then
+    echo "WARNING: the vpc provider resolves ${VPC_ID}, but this instance lives in ${STATE_VPC_ID}; keeping ${STATE_VPC_ID} so the instance is not replaced." >&2
+    VPC_ID="$STATE_VPC_ID"
+  fi
+
+  if [ -n "$STATE_REGION" ] && [ "$STATE_REGION" != "$REGION" ]; then
+    echo "WARNING: the cloud-providers provider resolves ${REGION}, but this instance lives in ${STATE_REGION}; keeping ${STATE_REGION}." >&2
+    REGION="$STATE_REGION"
+    export REGION
+  fi
 fi
 
 case "$STATE_KMS_KEY" in

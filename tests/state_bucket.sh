@@ -73,10 +73,20 @@ EOS
 #!/bin/bash
 case "$1 $2" in
   "provider list")
-    echo '{"results":[{"id":"prov-region","data_source":{"stored_keys":["account.region"]}},{"id":"prov-vpc","data_source":{"stored_keys":["vpc.id"]}}]}'
-    ;;
-  "provider read")
-    echo '{"attributes":{"account":{"region":"us-east-1"},"vpc":{"id":"vpc-123"}}}'
+    category=""
+    prev=""
+    for a in "$@"; do
+      case "$prev" in
+        --categories) category="$a" ;;
+        --limit) [ -n "$category" ] && { echo '{"error":"cannot use flag limit when using categories flag"}'; exit 1; } ;;
+      esac
+      prev="$a"
+    done
+    case "$category" in
+      cloud-providers) echo '{"results":[{"attributes":{"account":{"region":"us-east-1"}}}]}' ;;
+      vpc) echo '{"results":[{"attributes":{"vpc":{"id":"vpc-123"}}}]}' ;;
+      *) echo '{"results":[]}' ;;
+    esac
     ;;
   "service read")
     echo '{"attributes":{"hostname":"db.example.com","port":"5432","database_name":"app","username":"app"}}'
