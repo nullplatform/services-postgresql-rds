@@ -32,7 +32,7 @@ rds-postgres-server  ──────► AWS RDS PostgreSQL Instance
 This service integrates with nullplatform through:
 
 - **Dependency service type**: registered as a `dependency` service in nullplatform
-- **Provider resolution**: reads `account.region` and `vpc.id` from the nullplatform providers that resolve for the service NRN and dimensions
+- **Provider resolution**: reads `account.region` and `vpc.id` from the nullplatform providers that resolve for the service NRN and dimensions; an existing instance keeps the VPC and region recorded in its state
 - **Service attributes**: writes RDS connection metadata back to nullplatform via `np service patch` after provisioning
 - **Link attributes**: writes per-link DB credentials to link attributes via `np link patch` so applications can consume them as environment variables
 - **Dimension matching**: supports nullplatform dimensions so multiple environments (e.g., `cluster: prod`, `cluster: staging`) can have isolated RDS instances

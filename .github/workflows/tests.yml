@@ -20,3 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash tests/provider_lookup.sh
+
+  external-kms-key:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/external_kms_key.sh
