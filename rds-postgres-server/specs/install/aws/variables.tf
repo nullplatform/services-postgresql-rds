@@ -72,7 +72,7 @@ variable "vpc_id" {
 }
 
 variable "vpc_subnets" {
-  description = "Subnet IDs for the aws-networking-configuration provider. Pass whatever the cluster's VPC provider already uses for other scopes/services — this service only reads vpc.id from it, not this list. Required when create_account_providers is true."
+  description = "Subnet IDs for the aws-networking-configuration provider. The RDS subnet group is built from this list, so pass at least two private subnets in different availability zones. Required when create_account_providers is true."
   type        = list(string)
   default     = []
 }

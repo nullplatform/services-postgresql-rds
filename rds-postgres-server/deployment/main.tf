@@ -103,7 +103,7 @@ moved {
 
 resource "aws_db_subnet_group" "main" {
   name       = var.instance_name
-  subnet_ids = data.aws_subnets.private.ids
+  subnet_ids = var.subnet_ids
 
   tags = {
     "managed-by" = "nullplatform"

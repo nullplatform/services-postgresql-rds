@@ -19,6 +19,16 @@ variable "vpc_id" {
   description = "VPC ID where the RDS instance will be deployed"
 }
 
+variable "subnet_ids" {
+  type        = list(string)
+  description = "Subnets for the DB subnet group, from vpc.subnets of the vpc provider"
+
+  validation {
+    condition     = length(var.subnet_ids) >= 2
+    error_message = "subnet_ids needs at least two subnets in different availability zones"
+  }
+}
+
 variable "instance_class" {
   type        = string
   default     = "db.t3.micro"

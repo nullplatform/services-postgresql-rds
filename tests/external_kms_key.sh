@@ -56,7 +56,7 @@ case "$1 $2" in
     done
     case "$category" in
       cloud-providers) echo '{"results":[{"attributes":{"account":{"region":"us-east-1"}}}]}' ;;
-      vpc) echo '{"results":[{"attributes":{"vpc":{"id":"vpc-123"}}}]}' ;;
+      vpc) echo '{"results":[{"attributes":{"vpc":{"id":"vpc-123","subnets":["subnet-a","subnet-b"]}}}]}' ;;
       *) echo '{"results":[]}' ;;
     esac
     ;;

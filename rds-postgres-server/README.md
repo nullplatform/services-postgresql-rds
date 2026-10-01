@@ -86,7 +86,7 @@ Exposed in the nullplatform UI when creating or updating the service:
 | Resource | Description |
 |---|---|
 | `aws_db_instance` | The RDS PostgreSQL instance (gp3 storage, encrypted, no public access) |
-| `aws_db_subnet_group` | Subnet group using VPC subnets tagged `nullplatform/subnet-type=private` |
+| `aws_db_subnet_group` | Subnet group using `vpc.subnets` of the `vpc` provider |
 | `aws_security_group` | Allows port 5432 ingress from within the VPC |
 | `aws_secretsmanager_secret` | Stores the master PostgreSQL password |
 | `aws_s3_bucket` | only in the deprecated fallback: `np-service-<SERVICE_ID>`, a versioned bucket for Terraform state |
@@ -103,7 +103,7 @@ Exposed in the nullplatform UI when creating or updating the service:
 - An active nullplatform account with the following providers configured for the target namespace/dimensions:
   - **`aws-configuration`** (from `tofu-modules//nullplatform/cloud/aws/cloud`) — exposes `account.region`. `build_context` resolves this via `np provider list --nrn <service NRN> --categories cloud-providers --dimensions <service dimensions>`.
   - **`aws-networking-configuration`** (from `tofu-modules//nullplatform/cloud/aws/vpc`) — exposes `vpc.id`, `vpc.subnets`, `vpc.security_groups`. Same lookup mechanism, with `--categories vpc`.
-- The VPC must have private subnets tagged with `nullplatform/subnet-type=private`.
+- The `vpc` provider must list in `vpc.subnets` at least two private subnets in different availability zones; `build_context` stops before tofu otherwise.
 - For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **account-level NRN** (or any ascendant of the service's NRN — resolution walks up the hierarchy).
 
 Example registering the `aws-configuration` and `aws-networking-configuration`
@@ -129,13 +129,9 @@ module "vpc_provider" {
 }
 ```
 
-`vpc_subnets`/`vpc_security_groups` don't need to be scoped down to only
-what this service uses — pass whatever the cluster's VPC provider already
-uses for other scopes/services (e.g. all node/pod subnets and the cluster
-security group). This service only reads `vpc.id` from this provider; the
-actual subnets it deploys into come separately from
-`data.aws_subnets.private` (filtered by the `nullplatform/subnet-type=private`
-tag, not from this provider's `vpc_subnets` list).
+The RDS subnet group is built from this provider's `vpc_subnets`, so list
+the private subnets the database should live in. An instance that already
+exists keeps the subnets recorded in its state.
 
 ### AWS IAM Permissions
 
