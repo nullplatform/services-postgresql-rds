@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.2...v0.4.3) (2026-10-01)
+
+
+### Bug Fixes
+
+* take db subnets from the vpc provider instead of a subnet tag ([#40](https://github.com/nullplatform/services-postgresql-rds/issues/40)) ([868e6f5](https://github.com/nullplatform/services-postgresql-rds/commit/868e6f509e3704dc202d29a2cf952f77ee29be6f))
+
 ## [0.4.2](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.1...v0.4.2) (2026-10-01)
 
 
