@@ -14,3 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash tests/do_tofu_version.sh ${{ matrix.package }}/scripts/aws/do_tofu
+
+  prevent-destroy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/prevent_destroy.sh

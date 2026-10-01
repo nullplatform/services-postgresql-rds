@@ -33,6 +33,7 @@ This service integrates with nullplatform through:
 
 - **Dependency service type**: registered as a `dependency` service in nullplatform
 - **Provider resolution**: reads `account.region` and `vpc.id` from account-level nullplatform providers at creation time
+- **Replace protection**: the RDS instance has `prevent_destroy`, so a plan that would replace it fails; only the delete workflow lifts it
 - **Service attributes**: writes RDS connection metadata back to nullplatform via `np service patch` after provisioning
 - **Link attributes**: writes per-link DB credentials to link attributes via `np link patch` so applications can consume them as environment variables
 - **Dimension matching**: supports nullplatform dimensions so multiple environments (e.g., `cluster: prod`, `cluster: staging`) can have isolated RDS instances

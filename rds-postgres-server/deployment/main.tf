@@ -143,4 +143,8 @@ resource "aws_db_instance" "main" {
   }
 
   depends_on = [aws_secretsmanager_secret_version.master]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
