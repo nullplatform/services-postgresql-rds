@@ -78,6 +78,6 @@ EOF
 
 export TOFU_MODULE_DIR="$SERVICE_PATH/permissions"
 
-export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
+export TOFU_INIT_VARIABLES="-backend-config=bucket=${TFSTATE_BUCKET} -backend-config=key=${TFSTATE_KEY_PREFIX}links/${LINK_ID}.tfstate -backend-config=region=${REGION}"
 
 export TOFU_VARIABLES="-var=db_host=${DB_HOST} -var=db_port=${DB_PORT} -var=db_name=${DB_NAME} -var=db_username=${DB_USERNAME} -var=master_username=${MASTER_USER} -var=access_level=${LINK_ACCESS_LEVEL:-read-write}"

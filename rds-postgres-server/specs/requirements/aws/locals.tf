@@ -11,3 +11,26 @@ locals {
     Module    = local.iam_module_name
   })
 }
+
+locals {
+  # Access to the state bucket the operator names. Nothing here assumes a bucket
+  # naming convention: the role is granted on that bucket and nothing else.
+  shared_state_statements = [
+    {
+      "Effect" : "Allow",
+      "Action" : ["s3:ListBucket", "s3:ListBucketVersions", "s3:GetBucketLocation"],
+      "Resource" : ["arn:aws:s3:::${var.state_bucket_name}"]
+    },
+    {
+      "Effect" : "Allow",
+      "Action" : [
+        "s3:GetObject",
+        "s3:GetObjectVersion",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:DeleteObjectVersion"
+      ],
+      "Resource" : ["arn:aws:s3:::${var.state_bucket_name}/*"]
+    },
+  ]
+}

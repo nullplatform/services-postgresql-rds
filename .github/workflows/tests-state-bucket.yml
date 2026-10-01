@@ -1,0 +1,16 @@
+name: tests-state-bucket
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  state-bucket:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [rds-postgres-db, rds-postgres-server]
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/state_bucket.sh ${{ matrix.package }}

@@ -48,6 +48,12 @@ resource "aws_iam_role_policy_attachment" "rds_s3" {
   policy_arn = aws_iam_policy.nullplatform_rds_s3_policy[0].arn
 }
 
+resource "aws_iam_role_policy_attachment" "rds_external_kms" {
+  count      = local.iam_create && length(var.external_kms_key_arns) > 0 ? 1 : 0
+  role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
+  policy_arn = aws_iam_policy.nullplatform_rds_external_kms_policy[0].arn
+}
+
 resource "aws_iam_role_policy_attachment" "rds_kms" {
   count      = local.iam_create ? 1 : 0
   role       = aws_iam_role.nullplatform_rds_postgres_server[0].name
@@ -133,7 +139,7 @@ resource "aws_iam_policy" "nullplatform_rds_sg_policy" {
 }
 
 ################################################################################
-# S3 IAM policy (per-service tfstate buckets: np-service-<id>)
+# S3 IAM policy (the state bucket the operator names)
 ################################################################################
 
 # Grant permissions to manage the per-link S3 bucket used to store tofu state
@@ -141,31 +147,11 @@ resource "aws_iam_policy" "nullplatform_rds_s3_policy" {
   count = local.iam_create ? 1 : 0
 
   name        = "${local.policies_name_prefix}-rds-s3-policy"
-  description = "Policy for managing per-service S3 tfstate buckets (np-service-*)"
+  description = "Access to the S3 bucket holding the tofu state for this service"
 
   policy = jsonencode({
     "Version" : "2012-10-17",
-    "Statement" : [
-      {
-        "Effect" : "Allow",
-        "Action" : [
-          "s3:CreateBucket",
-          "s3:HeadBucket",
-          "s3:PutBucketVersioning",
-          "s3:ListBucket",
-          "s3:ListBucketVersions",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-          "s3:DeleteObjectVersion",
-          "s3:DeleteBucket"
-        ],
-        "Resource" : [
-          "arn:aws:s3:::np-service-*",
-          "arn:aws:s3:::np-service-*/*"
-        ]
-      }
-    ]
+    "Statement" : local.shared_state_statements
   })
 }
 
@@ -262,6 +248,34 @@ resource "aws_iam_policy" "nullplatform_rds_kms_policy" {
         "Effect" : "Allow",
         "Action" : "kms:ListAliases",
         "Resource" : "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "nullplatform_rds_external_kms_policy" {
+  count = local.iam_create && length(var.external_kms_key_arns) > 0 ? 1 : 0
+
+  name        = "${local.policies_name_prefix}-rds-external-kms-policy"
+  description = "Policy for using existing KMS keys for RDS storage encryption"
+
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Sid" : "DescribeExternalCMK",
+        "Effect" : "Allow",
+        "Action" : "kms:DescribeKey",
+        "Resource" : var.external_kms_key_arns
+      },
+      {
+        "Sid" : "GrantExternalCMKToRDS",
+        "Effect" : "Allow",
+        "Action" : "kms:CreateGrant",
+        "Resource" : var.external_kms_key_arns,
+        "Condition" : {
+          "Bool" : { "kms:GrantIsForAWSResource" : "true" }
+        }
       }
     ]
   })

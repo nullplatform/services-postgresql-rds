@@ -128,7 +128,23 @@ No RDS, EC2, or VPC resources are created — those belong to the auto-discovere
 This service requires fewer AWS permissions than `rds-postgres-server` (no RDS/EC2), but it does manage its own Secrets Manager secret. The agent needs:
 
 - **Secrets Manager**: `GetSecretValue` — to retrieve the master PostgreSQL password from the ARN stored in service attributes; plus `CreateSecret`, `PutSecretValue`, `UpdateSecret`, `DeleteSecret`, `DescribeSecret`, `TagResource`, `UntagResource`, `GetResourcePolicy`, `ListSecretVersionIds` — to create, update, and delete the app-level credentials secret this service owns
-- **S3**: full lifecycle on the `np-service-<SERVICE_ID>` bucket — `build_context` creates and manages its own per-service Terraform state bucket, same as `rds-postgres-server`
+- **S3**: read/write on the state bucket named by `state_bucket_name`, and nothing else
+
+Set `RDS_POSTGRES_S3_STATE_BUCKET` on the agent to the name of an existing S3 bucket and every service instance keeps its Terraform state there under `services/rds-postgres/<service-id>/`. Both packages share the bucket; the service id keeps their keys apart. Deleting a service removes only its own prefix and never touches the bucket.
+
+The bucket must already exist — the service does not create it, and any name works. Pass it as `state_bucket_name` to the `specs/requirements/aws` module, which grants the role access to that bucket and nothing else.
+
+`RDS_POSTGRES_S3_STATE_BUCKET` is required. Without it every action fails before touching AWS.
+
+Earlier versions created one bucket per instance (`np-service-<service-id>`) and deleted it with the service. That is gone. **Instances provisioned by those versions must have their state moved before the next action runs**, or tofu will start from an empty state and try to create infrastructure that already exists:
+
+```bash
+aws s3 cp --recursive "s3://np-service-<service-id>/" \
+                      "s3://<shared-bucket>/services/rds-postgres/<service-id>/"
+aws s3 rb "s3://np-service-<service-id>" --force
+```
+
+The old bucket can go once the copy is verified.
 
 No RDS or EC2 permissions are needed.
 

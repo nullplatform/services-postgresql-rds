@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.0...v0.4.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **deps:** bump nullplatform/scopes/worker-bridge from 1.1.1 to 2.0.1 ([34cec1b](https://github.com/nullplatform/services-postgresql-rds/commit/34cec1bbb11b1b512e8ceb6d59a044d6a2a50b67))
+* **deps:** bump nullplatform/scopes/worker-bridge from 1.1.1 to 2.0.1 ([13f5ed7](https://github.com/nullplatform/services-postgresql-rds/commit/13f5ed7bb72ff8dfab9cee47da29e8ad1cc44af3))
+
+## [0.4.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.3.1...v0.4.0) (2026-09-29)
+
+
+### Features
+
+* encrypt new instances with an existing kms key from RDS_POSTGRES_KMS_KEY_ARN ([ddfc6ea](https://github.com/nullplatform/services-postgresql-rds/commit/ddfc6ea2e1e73deb4fdecd1addee26df8771cc2a))
+* encrypt new instances with an existing kms key from RDS_POSTGRES_KMS_KEY_ARN ([02470f1](https://github.com/nullplatform/services-postgresql-rds/commit/02470f103311d2ad7cc5d58c17d75c570c758a86))
+
+## [0.3.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.3.0...v0.3.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* pin tofu 1.12.6 and install it when the cached one is older ([2de7a68](https://github.com/nullplatform/services-postgresql-rds/commit/2de7a6866f7e765adf06ff891adebcb75f99d8d7))
+* pin tofu 1.12.6 and install it when the cached one is older ([c93a1e8](https://github.com/nullplatform/services-postgresql-rds/commit/c93a1e82b235e11057b5d28bed5926cae2a7f467))
+
 ## [0.3.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.2.1...v0.3.0) (2026-09-18)
 
 

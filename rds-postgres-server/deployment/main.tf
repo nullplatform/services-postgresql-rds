@@ -69,6 +69,8 @@ resource "aws_secretsmanager_secret_version" "master" {
 # ---------------------------------------------------------------------------
 
 resource "aws_kms_key" "rds" {
+  count = var.kms_key_arn == null ? 1 : 0
+
   description         = "Customer managed key for RDS instance storage encryption (${var.instance_name})"
   enable_key_rotation = true
 
@@ -79,8 +81,20 @@ resource "aws_kms_key" "rds" {
 }
 
 resource "aws_kms_alias" "rds" {
+  count = var.kms_key_arn == null ? 1 : 0
+
   name          = "alias/nullplatform-rds-${var.instance_name}"
-  target_key_id = aws_kms_key.rds.key_id
+  target_key_id = aws_kms_key.rds[0].key_id
+}
+
+moved {
+  from = aws_kms_key.rds
+  to   = aws_kms_key.rds[0]
+}
+
+moved {
+  from = aws_kms_alias.rds
+  to   = aws_kms_alias.rds[0]
 }
 
 # ---------------------------------------------------------------------------
@@ -105,7 +119,7 @@ resource "aws_db_instance" "main" {
   allocated_storage = var.allocated_storage
   storage_type      = "gp3"
   storage_encrypted = true
-  kms_key_id        = aws_kms_key.rds.arn
+  kms_key_id        = var.kms_key_arn != null ? var.kms_key_arn : aws_kms_key.rds[0].arn
 
   db_name  = "postgres"
   username = "master"

@@ -18,3 +18,5 @@ steps:
     output:
       - name: TFSTATE_BUCKET
         type: environment
+      - name: TFSTATE_KEY_PREFIX
+        type: environment

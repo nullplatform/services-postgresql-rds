@@ -66,3 +66,9 @@ variable "secret_kms_key_id" {
   default     = null
   description = "KMS key ID or ARN used to encrypt the RDS master secret in Secrets Manager. If not set, AWS encrypts it with the default aws/secretsmanager managed key."
 }
+
+variable "kms_key_arn" {
+  type        = string
+  default     = null
+  description = "ARN of an existing KMS key for RDS storage encryption. When null, the module creates a dedicated key."
+}

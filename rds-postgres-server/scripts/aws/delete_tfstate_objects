@@ -2,31 +2,33 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# delete_tfstate_bucket — Removes the per-instance S3 tfstate bucket after
-# tofu destroy has run and the state file is no longer needed.
-#
-# Versioned buckets must be emptied (all versions + delete markers) before
-# deletion. Uses delete-objects (batch) to avoid jq pipeline failures when
-# the bucket is empty (list-object-versions returns null for empty buckets).
+# delete_tfstate_objects — Removes this instance's tofu state after destroy has
+# run and the state file is no longer needed. The bucket holds every other
+# instance's state too, so only this instance's key prefix is emptied.
 #
 # Expected environment variables (exported by build_context):
-#   TFSTATE_BUCKET — name of the bucket to delete (np-service-<SERVICE_ID>)
+#   TFSTATE_BUCKET     — bucket holding the state
+#   TFSTATE_KEY_PREFIX — this instance's prefix
 # ---------------------------------------------------------------------------
 
-# REGION is exported by build_context (resolved from the nullplatform account provider).
-if [ -z "${REGION:-}" ]; then
-  echo "ERROR: REGION is not set. Expected to be exported by build_context." >&2
+yaml_value() {
+  local key="$1" default="$2" file="$3"
+  local val
+  val=$(grep "^${key}:" "$file" 2>/dev/null | sed 's/^[^:]*: *//;s/^"//;s/"$//' | head -1)
+  echo "${val:-$default}"
+}
+
+REGION=$(yaml_value "region" "us-east-1" "$VALUES")
+
+if [ -z "${TFSTATE_BUCKET:-}" ]; then
+  echo "ERROR: TFSTATE_BUCKET is not set. Expected to be exported by build_context." >&2
   exit 1
 fi
 
-if [ -z "${TFSTATE_BUCKET:-}" ]; then
-  echo "TFSTATE_BUCKET is not set, skipping bucket cleanup."
-  exit 0
-fi
-
-if ! aws s3api head-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION" 2>/dev/null; then
-  echo "Bucket ${TFSTATE_BUCKET} does not exist, nothing to delete."
-  exit 0
+if [ -z "${TFSTATE_KEY_PREFIX:-}" ]; then
+  echo "ERROR: TFSTATE_KEY_PREFIX is empty." >&2
+  echo "       Refusing to continue: this would delete every service's state." >&2
+  exit 1
 fi
 
 delete_objects() {
@@ -38,6 +40,7 @@ delete_objects() {
   objects=$(aws s3api list-object-versions \
     --bucket "$TFSTATE_BUCKET" \
     --region "$REGION" \
+    --prefix "$TFSTATE_KEY_PREFIX" \
     --query "${query}" \
     --output json) || rc=$?
 
@@ -65,6 +68,4 @@ delete_objects() {
 delete_objects 'Versions[].{Key:Key,VersionId:VersionId}' "object versions"
 delete_objects 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' "delete markers"
 
-echo "Deleting bucket ${TFSTATE_BUCKET}..."
-aws s3api delete-bucket --bucket "$TFSTATE_BUCKET" --region "$REGION"
-echo "Bucket ${TFSTATE_BUCKET} deleted."
+echo "Removed tofu state under s3://${TFSTATE_BUCKET}/${TFSTATE_KEY_PREFIX}"
