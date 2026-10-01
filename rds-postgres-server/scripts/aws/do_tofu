@@ -81,6 +81,13 @@ cd "$OUTPUT_DIR"
 # exists in OUTPUT_DIR, not in TOFU_MODULE_DIR, so cp will not overwrite it.
 cp -r "$TOFU_MODULE_DIR"/* .
 
+if [ "$TOFU_ACTION" = "destroy" ]; then
+  for tf in ./*.tf; do
+    sed 's/prevent_destroy[[:space:]]*=[[:space:]]*true/prevent_destroy = false/' "$tf" > "$tf.tmp"
+    mv "$tf.tmp" "$tf"
+  done
+fi
+
 echo "Running: tofu init"
 # shellcheck disable=SC2086
 tofu init $TOFU_INIT_VARIABLES
