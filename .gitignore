@@ -19,3 +19,6 @@ gen
 !terraform.tfvars.example
 
 .DS_Store
+
+.claude
+.env

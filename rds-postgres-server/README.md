@@ -32,7 +32,7 @@ rds-postgres-server  ──────► AWS RDS PostgreSQL Instance
 This service integrates with nullplatform through:
 
 - **Dependency service type**: registered as a `dependency` service in nullplatform
-- **Provider resolution**: reads `account.region` and `vpc.id` from account-level nullplatform providers at creation time
+- **Provider resolution**: reads `account.region` and `vpc.id` from the nullplatform providers that resolve for the service NRN and dimensions
 - **Service attributes**: writes RDS connection metadata back to nullplatform via `np service patch` after provisioning
 - **Link attributes**: writes per-link DB credentials to link attributes via `np link patch` so applications can consume them as environment variables
 - **Dimension matching**: supports nullplatform dimensions so multiple environments (e.g., `cluster: prod`, `cluster: staging`) can have isolated RDS instances
@@ -101,8 +101,8 @@ Exposed in the nullplatform UI when creating or updating the service:
   [`specs/install/README.md`](specs/install/README.md) for the Terraform that
   registers the service specification and agent association.
 - An active nullplatform account with the following providers configured for the target namespace/dimensions:
-  - **`aws-configuration`** (from `tofu-modules//nullplatform/cloud/aws/cloud`) — exposes `account.region`. `build_context` resolves this via `np provider list --nrn <account-level NRN>` filtered by `stored_keys` containing `account.region`.
-  - **`aws-networking-configuration`** (from `tofu-modules//nullplatform/cloud/aws/vpc`) — exposes `vpc.id`, `vpc.subnets`, `vpc.security_groups`. Same lookup mechanism, filtered by `vpc.id`.
+  - **`aws-configuration`** (from `tofu-modules//nullplatform/cloud/aws/cloud`) — exposes `account.region`. `build_context` resolves this via `np provider list --nrn <service NRN> --categories cloud-providers --dimensions <service dimensions>`.
+  - **`aws-networking-configuration`** (from `tofu-modules//nullplatform/cloud/aws/vpc`) — exposes `vpc.id`, `vpc.subnets`, `vpc.security_groups`. Same lookup mechanism, with `--categories vpc`.
 - The VPC must have private subnets tagged with `nullplatform/subnet-type=private`.
 - For AssumeRole to work (not just fail open to agent credentials — see below): an **`aws-iam-configuration`** provider (from `tofu-modules//nullplatform/identity-access-control`) registered at the **account-level NRN** (or any ascendant of the service's NRN — resolution walks up the hierarchy).
 
