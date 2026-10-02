@@ -12,5 +12,5 @@ jobs:
       matrix:
         package: [rds-postgres-db, rds-postgres-server]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: bash tests/state_bucket.sh ${{ matrix.package }}
