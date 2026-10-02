@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.6](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.5...v0.4.6) (2026-10-02)
+
+
+### Bug Fixes
+
+* **deps:** bump aws-actions/configure-aws-credentials from 4 to 6 ([#28](https://github.com/nullplatform/services-postgresql-rds/issues/28)) ([1070c0b](https://github.com/nullplatform/services-postgresql-rds/commit/1070c0b7e19ba7fc6b2fcf83bb966f9385d26939))
+
 ## [0.4.5](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.4...v0.4.5) (2026-10-02)
 
 
