@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.5](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.4...v0.4.5) (2026-10-02)
+
+
+### Bug Fixes
+
+* **deps:** bump actions/checkout from 4 to 7 ([#27](https://github.com/nullplatform/services-postgresql-rds/issues/27)) ([53f0831](https://github.com/nullplatform/services-postgresql-rds/commit/53f083115b64da935aaa6921a03f58f3b999331e))
+* **deps:** bump docker/setup-buildx-action from 3 to 4 ([#26](https://github.com/nullplatform/services-postgresql-rds/issues/26)) ([db0301d](https://github.com/nullplatform/services-postgresql-rds/commit/db0301dd2b3518ba2b9bc4714f331a786fea289c))
+* **deps:** bump docker/setup-qemu-action from 3 to 4 ([#29](https://github.com/nullplatform/services-postgresql-rds/issues/29)) ([508d55a](https://github.com/nullplatform/services-postgresql-rds/commit/508d55a2a7c580e9336f790f3b2a78eb85c19f81))
+
 ## [0.4.4](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.3...v0.4.4) (2026-10-02)
 
 
