@@ -26,3 +26,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: bash tests/external_kms_key.sh
+
+  metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: sudo apt-get install -y bats
+      - run: bats rds-postgres-server/scripts/tests/aws
+
+  requirements-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v1
+      - working-directory: rds-postgres-server/specs/requirements/aws
+        run: |
+          tofu init -backend=false
+          tofu test

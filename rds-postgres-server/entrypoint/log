@@ -1,0 +1,4 @@
+#!/bin/bash
+set -euo pipefail
+
+exec "$SERVICE_PATH/scripts/aws/read_logs"

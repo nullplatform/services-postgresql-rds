@@ -9,6 +9,7 @@ A nullplatform dependency service that provisions and manages a shared **Amazon 
 - Creates a dedicated security group allowing port 5432 within the VPC
 - Manages per-link databases and users: each link to an application creates a dedicated PostgreSQL database and user with scoped grants
 - Stores connection metadata in nullplatform service attributes so linked services can discover the endpoint
+- Shows eight CloudWatch metrics of the instance in the service's metrics view
 
 ## Architecture
 
@@ -81,6 +82,25 @@ Exposed in the nullplatform UI when creating or updating the service:
 | `link` | Application linked | Creates a PostgreSQL database + user with `CONNECT`, `USAGE`, and DML grants |
 | `unlink` | Application unlinked | Revokes grants only; database and user are **preserved** for data retention |
 
+## Metrics
+
+`metric:list` and `metric:data` notifications run `scripts/aws/list_metrics` and `scripts/aws/fetch_metric` directly from `entrypoint/metric`, without `np service workflow exec` and without assuming the permissions role. `metric:data` makes one AWS call, to CloudWatch: `AWS/RDS` with the dimension `DBInstanceIdentifier` from the `db_instance_identifier` attribute, in the region of the `hostname` attribute, for the requested `start_time`, `end_time` and `period` (rounded up to a multiple of 60 seconds).
+
+| Metric | Statistic | Unit |
+|---|---|---|
+| `CPUUtilization` | Average | percent |
+| `DatabaseConnections` | Maximum | count |
+| `FreeStorageSpace` | Minimum | bytes |
+| `FreeableMemory` | Minimum | bytes |
+| `ReadIOPS` | Average | count (per second) |
+| `WriteIOPS` | Average | count (per second) |
+| `ReadLatency` | Average | seconds |
+| `WriteLatency` | Average | seconds |
+
+A service whose instance does not exist yet returns an empty series. A CloudWatch error fails the request instead of showing an empty graph. Metrics belong to the instance, so `rds-postgres-db` services show none.
+
+The service has no logs: `log:*` notifications run `scripts/aws/read_logs`, which answers with no entries. Telemetry scripts print nothing but their result, since stdout is the response. Workflow overrides do not apply to telemetry.
+
 ## Infrastructure Resources Created
 
 | Resource | Description |
@@ -152,6 +172,15 @@ policies, with a trust policy allowing the nullplatform agent role to
 and `policies_name_prefix` (defaults to `nullplatform-<cluster_name>`) when
 applying it. Granting the agent itself permission to assume this role is
 handled separately, outside this module.
+
+The agent role itself also needs `cloudwatch:GetMetricStatistics` on `*`:
+metrics run on the agent's credentials, never on the permissions role, so
+they cost a single AWS call. The module attaches that policy to
+`agent_role_arn` and `additional_agent_role_arns`; set
+`attach_metrics_policy_to_agent_roles = false` if the agent role is managed
+elsewhere. The `specs/install` module subscribes the agent channel to
+`service` and `telemetry` notifications; without `telemetry` the service
+shows no metrics.
 
 ### AssumeRole Setup Guide
 

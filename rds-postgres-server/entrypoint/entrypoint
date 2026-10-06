@@ -16,24 +16,28 @@ if [ -n "${NP_API_KEY:-}" ] && [ -z "${NULLPLATFORM_API_KEY:-}" ]; then
   export NULLPLATFORM_API_KEY="$NP_API_KEY"
 fi
 
-# Strip surrounding single quotes that np-agent may wrap the context in
-CLEAN_CONTEXT=$(echo "$NP_ACTION_CONTEXT" | sed "s/^'//;s/'$//")
+CLEAN_CONTEXT="${NP_ACTION_CONTEXT#\'}"
+CLEAN_CONTEXT="${CLEAN_CONTEXT%\'}"
 export NP_ACTION_CONTEXT="$CLEAN_CONTEXT"
 
-export CONTEXT=$(echo "$CLEAN_CONTEXT" | jq '.notification')
-export SERVICE_ACTION=$(echo "$CONTEXT"      | jq -r '.slug')
-export SERVICE_ACTION_TYPE=$(echo "$CONTEXT" | jq -r '.type')
-export NOTIFICATION_ACTION=$(echo "$CONTEXT" | jq -r '.action')
-export LINK=$(echo "$CONTEXT"                | jq '.link')
+eval "$(printf '%s' "$CLEAN_CONTEXT" | jq -r '
+  .notification as $notification
+  | @sh "CONTEXT=\($notification | tojson)
+SERVICE_ACTION=\($notification.slug | tostring)
+SERVICE_ACTION_TYPE=\($notification.type | tostring)
+NOTIFICATION_ACTION=\($notification.action | tostring)
+LINK=\($notification.link | tojson)
+IS_LINK_ACTION=\($notification.link != null | tostring)"')"
+export CONTEXT SERVICE_ACTION SERVICE_ACTION_TYPE NOTIFICATION_ACTION LINK
 
 ACTION_SOURCE=service
-IS_LINK_ACTION=$(echo "$CONTEXT" | jq '.link != null')
 
 if [ "$IS_LINK_ACTION" = "true" ]; then
   ACTION_SOURCE=link
 fi
 
-export WORKING_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKING_DIRECTORY="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export WORKING_DIRECTORY
 
 SERVICE_PATH=""
 OVERRIDES_PATH=""
@@ -79,5 +83,13 @@ OVERRIDES_PATH="${OVERRIDES_PATH:-$SERVICE_PATH/overrides}"
 export SERVICE_PATH
 export OVERRIDES_PATH
 export ACTION_SOURCE
+
+if [[ "$NOTIFICATION_ACTION" =~ ^metric: ]]; then
+  exec "$WORKING_DIRECTORY/metric"
+fi
+
+if [[ "$NOTIFICATION_ACTION" =~ ^log: ]]; then
+  exec "$WORKING_DIRECTORY/log"
+fi
 
 np service-action exec --live-output --live-report --script="$WORKING_DIRECTORY/$ACTION_SOURCE"

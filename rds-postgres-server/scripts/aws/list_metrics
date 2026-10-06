@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+
+RESULT=$(jq -n -c '{
+  results: [
+    {name: "CPUUtilization", title: "CPU utilization", unit: "percent"},
+    {name: "DatabaseConnections", title: "Connections", unit: "count"},
+    {name: "FreeStorageSpace", title: "Free storage space", unit: "bytes"},
+    {name: "FreeableMemory", title: "Freeable memory", unit: "bytes"},
+    {name: "ReadIOPS", title: "Read IOPS", unit: "count"},
+    {name: "WriteIOPS", title: "Write IOPS", unit: "count"},
+    {name: "ReadLatency", title: "Read latency", unit: "seconds"},
+    {name: "WriteLatency", title: "Write latency", unit: "seconds"}
+  ] | map(. + {available_filters: [], available_group_by: []})
+}')
+
+echo "$RESULT"
