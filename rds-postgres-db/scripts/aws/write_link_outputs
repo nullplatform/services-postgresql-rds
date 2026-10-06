@@ -50,6 +50,7 @@ ATTRS=$(jq -n \
     password:          $password,
     database_name:     $database_name,
     jdbc_url:          $jdbc_url,
+    connection_string: "postgresql://\($username | @uri):\($password | @uri)@\($hostname):\($port)/\($database_name | @uri)?sslmode=require",
     master_secret_arn: $master_secret_arn,
     app_secret_arn:    $app_secret_arn
   }')

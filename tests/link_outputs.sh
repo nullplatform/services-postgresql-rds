@@ -57,6 +57,14 @@ JDBC_URL=$(jq -r '.attributes.jdbc_url' "$SANDBOX/body.json" 2>/dev/null)
 EXPECTED="jdbc:postgresql://pg.example.rds.amazonaws.com:5432/app_42?sslmode=require"
 check "link body carries a ready to use jdbc url" "$([ "$JDBC_URL" = "$EXPECTED" ] && echo ok)" "got: $JDBC_URL"
 check "jdbc url carries no password" "$([[ "$JDBC_URL" != *s3cret* ]] && echo ok)" "got: $JDBC_URL"
+CONNECTION_STRING=$(jq -r '.attributes.connection_string' "$SANDBOX/body.json" 2>/dev/null)
+EXPECTED_CONNECTION_STRING="postgresql://app_42:s3cret@pg.example.rds.amazonaws.com:5432/app_42?sslmode=require"
+check "link body carries a connection string with credentials" "$([ "$CONNECTION_STRING" = "$EXPECTED_CONNECTION_STRING" ] && echo ok)" "got: $CONNECTION_STRING"
+
+run_link_outputs '{"attributes":{"hostname":"pg.example.rds.amazonaws.com","port":5432,"username":"app_42","password":"p@ss:w/rd%","database_name":"app_42"}}'
+CONNECTION_STRING=$(jq -r '.attributes.connection_string' "$SANDBOX/body.json" 2>/dev/null)
+EXPECTED_CONNECTION_STRING="postgresql://app_42:p%40ss%3Aw%2Frd%25@pg.example.rds.amazonaws.com:5432/app_42?sslmode=require"
+check "connection string percent-encodes the password" "$([ "$CONNECTION_STRING" = "$EXPECTED_CONNECTION_STRING" ] && echo ok)" "got: $CONNECTION_STRING"
 
 run_link_outputs '{"attributes":{"hostname":"pg.example.rds.amazonaws.com","username":"app_42","password":"s3cret","database_name":"app_42"}}'
 JDBC_URL=$(jq -r '.attributes.jdbc_url' "$SANDBOX/body.json" 2>/dev/null)
