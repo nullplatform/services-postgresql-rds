@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.6...v0.5.0) (2026-10-06)
+
+
+### Features
+
+* run the worker images as a non-root user ([72b6a28](https://github.com/nullplatform/services-postgresql-rds/commit/72b6a288571206ccb173f7bf77b1672e8c495ad6))
+* run the worker images as a non-root user ([1cff130](https://github.com/nullplatform/services-postgresql-rds/commit/1cff130f79714f6c6c3820dc93aefc572ee33f6f))
+
+
+### Bug Fixes
+
+* hand HOME to the runtime user ([02364cf](https://github.com/nullplatform/services-postgresql-rds/commit/02364cfc9596e2b69680208954d2b1c3495b7338))
+
 ## [0.4.6](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.5...v0.4.6) (2026-10-02)
 
 
