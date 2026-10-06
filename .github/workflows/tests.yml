@@ -32,3 +32,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: bash tests/link_outputs.sh
+
+  instance-name:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash tests/instance_name.sh

@@ -5,7 +5,7 @@ variable "service_id" {
 
 variable "instance_name" {
   type        = string
-  description = "Unique instance name for AWS resource naming (format: np-<service_id>)"
+  description = "Unique instance name for AWS resource naming (format: <service_slug>-<service_id>, at most 63 characters; existing instances keep the name in their state)"
 }
 
 variable "region" {
