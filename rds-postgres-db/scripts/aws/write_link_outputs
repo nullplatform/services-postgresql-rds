@@ -32,12 +32,15 @@ if [ -z "$USERNAME" ]; then
   exit 0
 fi
 
+JDBC_URL="jdbc:postgresql://${HOSTNAME}:${PORT}/${DATABASE_NAME}?sslmode=require"
+
 ATTRS=$(jq -n \
   --arg hostname          "$HOSTNAME" \
   --arg port              "$PORT" \
   --arg username          "$USERNAME" \
   --arg password          "$PASSWORD" \
   --arg database_name     "$DATABASE_NAME" \
+  --arg jdbc_url          "$JDBC_URL" \
   --arg master_secret_arn "$MASTER_SECRET_ARN" \
   --arg app_secret_arn    "$APP_SECRET_ARN" \
   '{
@@ -46,6 +49,7 @@ ATTRS=$(jq -n \
     username:          $username,
     password:          $password,
     database_name:     $database_name,
+    jdbc_url:          $jdbc_url,
     master_secret_arn: $master_secret_arn,
     app_secret_arn:    $app_secret_arn
   }')

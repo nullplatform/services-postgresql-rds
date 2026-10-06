@@ -70,6 +70,15 @@
           "description": "Database name",
           "order": 6
         },
+        "jdbc_url": {
+          "type": "string",
+          "title": "JDBC URL",
+          "export": true,
+          "visibleOn": ["read"],
+          "editableOn": [],
+          "description": "Ready-to-use JDBC connection string for this database",
+          "order": 7
+        },
         "master_secret_arn": {
           "type": "string",
           "export": false,
