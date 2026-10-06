@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.5.0...v0.6.0) (2026-10-06)
+
+
+### Features
+
+* ready-to-use connection strings on the link and slug-based instance names ([#46](https://github.com/nullplatform/services-postgresql-rds/issues/46)) ([f33ac79](https://github.com/nullplatform/services-postgresql-rds/commit/f33ac79fd87739e03c8c40360d9ad43a1f968bcc))
+
 ## [0.5.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.4.6...v0.5.0) (2026-10-06)
 
 
