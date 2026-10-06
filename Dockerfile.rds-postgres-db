@@ -12,7 +12,17 @@ RUN curl -fsSL "https://github.com/opentofu/opentofu/releases/download/v${TOFU_V
       | tar -xz -C /usr/local/bin tofu \
     && tofu version
 
-COPY . /app/pkg
+# Bake the service in. --chown so the files belong to the uid this image runs
+# as: `np` chmods the action script in place at runtime, and a root-owned tree
+# would be read-only for the non-root user.
+COPY --chown=10001:10001 . /app/pkg
 ENV NP_PACKAGE_NAME=rds-postgres-db \
     NP_SERVICE_PATH=/app/pkg/rds-postgres-db \
     NP_SCOPE_ENTRYPOINT=/app/pkg/rds-postgres-db/entrypoint/entrypoint
+
+# Drop root for the runtime. Everything above installs as root, as usual; the
+# base (worker-bridge 2.0.0+) ships the app user, np on PATH and a writable
+# HOME, and leaves the switch to each image. Numeric on purpose: k8s
+# admission with runAsNonRoot resolves USER to a numeric id to prove it
+# isn't root, and a name doesn't satisfy that check.
+USER 10001:10001
