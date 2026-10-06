@@ -62,6 +62,10 @@ if [ "$1 $2" = "s3api create-bucket" ]; then
   echo "$bucket" >> "$EXISTING_BUCKETS"
   exit 0
 fi
+if [ "$1 $2" = "s3 cp" ]; then
+  echo "fatal error: An error occurred (404) when calling the HeadObject operation: Key \"$3\" does not exist" >&2
+  exit 1
+fi
 if [ "$1 $2" = "s3api list-object-versions" ]; then
   echo 'null'
   exit 0

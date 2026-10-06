@@ -70,6 +70,24 @@
           "description": "Database name",
           "order": 6
         },
+        "jdbc_url": {
+          "type": "string",
+          "title": "JDBC URL",
+          "export": true,
+          "visibleOn": ["read"],
+          "editableOn": [],
+          "description": "Ready-to-use JDBC connection string for this database",
+          "order": 7
+        },
+        "connection_string": {
+          "type": "string",
+          "title": "Connection String",
+          "export": {"type": "environment_variable", "secret": true},
+          "visibleOn": ["read"],
+          "editableOn": [],
+          "description": "Ready-to-use connection string with credentials for this database",
+          "order": 8
+        },
         "master_secret_arn": {
           "type": "string",
           "export": false,
