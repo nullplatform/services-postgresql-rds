@@ -12,11 +12,7 @@ set -euo pipefail
 # --- Parse service context --------------------------------------------------
 
 SERVICE_ID=$(echo "$CONTEXT" | jq -r '.service.id')
-SERVICE_NAME=$(echo "$CONTEXT" | jq -r '.service.name // ""')
-SERVICE_NAME="${SERVICE_NAME:-svc-${SERVICE_ID}}"
-
-# Sanitize name for use in AWS resource identifiers (lowercase, alphanumeric + hyphens, max 55 chars)
-INSTANCE_NAME="np-$(echo "$SERVICE_NAME" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//;s/-*$//' | cut -c1-55)"
+SERVICE_SLUG=$(echo "$CONTEXT" | jq -r '.service.slug // .service.name // ""')
 
 # Merge .service.attributes with action .parameters.
 # CRITICAL: On the first "create" action, .service.attributes is empty or incomplete.
@@ -149,6 +145,11 @@ kms_key_from_state() {
     return 1
   fi
 
+  if ! jq -e 'type == "object"' "$destination" >/dev/null 2>&1; then
+    echo "s3://${bucket}/${key} is not a valid tofu state" >&2
+    return 1
+  fi
+
   jq -r '
     [.resources[]? | select(.mode == "managed")] as $resources
     | ($resources | map(select(.type == "aws_db_instance" and .name == "main")) | .[0].instances[0].attributes.kms_key_id // "") as $instance_key
@@ -158,14 +159,30 @@ kms_key_from_state() {
 }
 
 STATE_STATUS=0
+STATE_INSTANCE_NAME=""
 STATE_KMS_KEY=$(kms_key_from_state "$TFSTATE_BUCKET" "${TFSTATE_KEY_PREFIX}terraform.tfstate" "$REGION" "$OUTPUT_DIR/previous-state.json") || STATE_STATUS=$?
 
 if [ "$STATE_STATUS" -eq 1 ]; then
-  echo "ERROR: could not read the tofu state at s3://${TFSTATE_BUCKET}/${TFSTATE_KEY_PREFIX}terraform.tfstate to find the instance's KMS key" >&2
+  echo "ERROR: could not read the tofu state at s3://${TFSTATE_BUCKET}/${TFSTATE_KEY_PREFIX}terraform.tfstate" >&2
+  exit 1
+fi
+
+if [ "$STATE_STATUS" -eq 2 ] && [ "$ACTION_TYPE" = "update" ] && [ "${ACTION_SOURCE:-}" != "link" ]; then
+  echo "ERROR: there is no tofu state at s3://${TFSTATE_BUCKET}/${TFSTATE_KEY_PREFIX}terraform.tfstate; refusing to update an instance whose name and resources are unknown" >&2
   exit 1
 fi
 
 if [ "$STATE_STATUS" -eq 0 ]; then
+  STATE_INSTANCE_NAME=$(jq -r '
+    [.resources[]? | select(.mode == "managed")] as $resources
+    | [
+        ($resources[] | select(.type == "aws_db_instance" and .name == "main") | .instances[0].attributes.identifier),
+        ($resources[] | select(.type == "aws_db_subnet_group" and .name == "main") | .instances[0].attributes.name),
+        ($resources[] | select(.type == "aws_security_group" and .name == "rds") | .instances[0].attributes.name // "" | ltrimstr("np-rds-")),
+        ($resources[] | select(.type == "aws_secretsmanager_secret" and .name == "master") | .instances[0].attributes.name // "" | ltrimstr("nullplatform/rds/") | rtrimstr("/master")),
+        ($resources[] | select(.type == "aws_kms_alias" and .name == "rds") | .instances[0].attributes.name // "" | ltrimstr("alias/nullplatform-rds-"))
+      ]
+    | map(select(. != null and . != "")) | .[0] // ""' "$OUTPUT_DIR/previous-state.json")
   STATE_VPC_ID=$(jq -r '[.resources[]? | select(.mode == "managed" and .type == "aws_security_group" and .name == "rds")][0].instances[0].attributes.vpc_id // ""' "$OUTPUT_DIR/previous-state.json")
   STATE_REGION=$(jq -r '[.resources[]? | select(.mode == "managed" and .type == "aws_db_instance" and .name == "main")][0].instances[0].attributes.arn // "" | split(":") | .[3] // ""' "$OUTPUT_DIR/previous-state.json")
 
@@ -187,6 +204,42 @@ if [ "$STATE_STATUS" -eq 0 ]; then
     export REGION
   fi
 fi
+
+if ! type -t instance_name_for >/dev/null 2>&1; then
+instance_name_for() {
+  local slug="$1" service_id="$2" label max_label
+
+  label=$(echo "$slug" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//;s/-*$//')
+  if [ -z "$label" ]; then
+    echo "ERROR: cannot name the instance: the service has no slug or name" >&2
+    return 1
+  fi
+
+  if [[ ! "$label" =~ ^[a-z] ]]; then
+    label="db-${label}"
+  fi
+
+  max_label=$((63 - 1 - ${#service_id}))
+  label="${label:0:$max_label}"
+  while [[ "$label" == *- ]]; do
+    label="${label%-}"
+  done
+
+  echo "${label}-${service_id}"
+}
+fi
+
+if [ -n "$STATE_INSTANCE_NAME" ]; then
+  echo "Keeping instance name ${STATE_INSTANCE_NAME} from the tofu state"
+  INSTANCE_NAME="$STATE_INSTANCE_NAME"
+else
+  if [ -z "$SERVICE_SLUG" ]; then
+    SERVICE_SLUG=$(np service read --id "$SERVICE_ID" --format json | jq -r '.slug // .name // ""')
+  fi
+  INSTANCE_NAME=$(instance_name_for "$SERVICE_SLUG" "$SERVICE_ID")
+fi
+
+echo "Using instance name: ${INSTANCE_NAME}"
 
 case "$STATE_KMS_KEY" in
   managed) KMS_KEY_ARN="" ;;

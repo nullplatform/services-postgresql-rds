@@ -306,6 +306,12 @@ For `rds-postgres-db` services to auto-discover this server, both services must 
 
 The master password secret is deleted immediately on service destroy (`recovery_window_in_days = 0`). There is no recovery window.
 
+### Resource Naming
+
+New instances and their AWS resources are named `<service slug>-<service id>`, e.g. `orders-cacb7da7-9e34-4ba3-be7a-c2a149c23ead`. The slug is truncated so the RDS identifier stays within 63 characters.
+
+An instance that already has a tofu state keeps the name recorded there, so instances created as `np-<service name>` are never renamed (renaming an RDS instance replaces it and loses its data).
+
 ### Storage Encryption
 
 All RDS instances are created with `storage_encrypted = true`. By default each instance gets its own customer-managed KMS key.
