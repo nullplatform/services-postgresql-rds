@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+
+if [ "$NOTIFICATION_ACTION" = "metric:list" ]; then
+  exec "$SERVICE_PATH/scripts/aws/list_metrics"
+fi
+
+exec "$SERVICE_PATH/scripts/aws/fetch_metric"

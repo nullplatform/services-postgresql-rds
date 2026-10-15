@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+
+### Features
+
+* metrics for the RDS instance in the service's metrics view: CPU, connections, free storage, freeable memory, read and write IOPS and latency
+* the requirements module grants the agent role `cloudwatch:GetMetricStatistics` so metrics show
+* the install module subscribes the agent channel to `telemetry` notifications
+
 ## [0.6.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.5.0...v0.6.0) (2026-10-06)
 
 
