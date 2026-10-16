@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/nullplatform/services-postgresql-rds/compare/v0.6.0...v0.6.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **deps:** bump nullplatform/scopes/worker-bridge from 2.0.1 to 2.0.3 ([#53](https://github.com/nullplatform/services-postgresql-rds/issues/53)) ([0bf62cf](https://github.com/nullplatform/services-postgresql-rds/commit/0bf62cfb0285bb48c3fd8102cfa18b9e57318008))
+
 ## [0.6.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.5.0...v0.6.0) (2026-10-06)
 
 
