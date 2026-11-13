@@ -183,7 +183,8 @@ resource "aws_iam_policy" "nullplatform_rds_secretsmanager_policy" {
           "secretsmanager:GetResourcePolicy",
           "secretsmanager:ListSecretVersionIds"
         ],
-        "Resource" : "*"
+        # The deployment only creates nullplatform/rds/<instance>/master.
+        "Resource" : "arn:aws:secretsmanager:*:${data.aws_caller_identity.current.account_id}:secret:nullplatform/rds/*"
       }
     ]
   })
