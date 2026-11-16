@@ -31,7 +31,7 @@ fi
 # is keyed by version and every candidate is version-checked, so an older binary
 # left in /tmp by another service is never reused.
 # ---------------------------------------------------------------------------
-TOFU_VERSION="1.12.6"
+TOFU_VERSION="1.13.9"
 TOFU_CACHE_DIR="/tmp/np-tofu-bin/${TOFU_VERSION}"
 
 tofu_version_of() {
