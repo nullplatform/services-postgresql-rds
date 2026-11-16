@@ -75,8 +75,17 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             -f Dockerfile.rds-postgres-db \
             -t "$IMAGE:$TAG" \
+            --metadata-file "$RUNNER_TEMP/build-metadata.json" \
             --push .
-          DIGEST=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          # The digest comes from the push itself. Reading it back with
+          # `imagetools inspect` right after the push races ECR Public, which
+          # can still answer "not found" for a few seconds and left the
+          # artifact registration with an empty digest.
+          DIGEST=$(jq -r '."containerimage.digest" // empty' "$RUNNER_TEMP/build-metadata.json")
+          if [ -z "$DIGEST" ]; then
+            echo "::error::buildx reported no image digest for $IMAGE:$TAG"
+            exit 1
+          fi
           echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
           echo "pushed $IMAGE:$TAG @ $DIGEST"
 
