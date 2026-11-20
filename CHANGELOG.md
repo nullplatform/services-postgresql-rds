@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.0](https://github.com/nullplatform/services-postgresql-rds/compare/v0.6.5...v0.7.0) (2026-11-20)
+
+
+### Features
+
+* **package:** publish both services as global packages ([865c648](https://github.com/nullplatform/services-postgresql-rds/commit/865c648b4129228cce00b91902a0b09763dda623))
+* **package:** publish both services as global packages ([a479781](https://github.com/nullplatform/services-postgresql-rds/commit/a479781180bb7c82dc0969f74cb2c0bca1c4e066))
+
 ## [0.6.5](https://github.com/nullplatform/services-postgresql-rds/compare/v0.6.4...v0.6.5) (2026-11-16)
 
 
