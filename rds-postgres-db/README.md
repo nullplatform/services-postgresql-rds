@@ -113,9 +113,8 @@ No RDS, EC2, or VPC resources are created — those belong to the auto-discovere
 
 ### nullplatform Prerequisites
 
-- The service itself must be registered on the nullplatform account first — see
-  [`specs/install/README.md`](specs/install/README.md) for the Terraform that
-  registers the service specification and agent association.
+- The package installed in the organization, with its agent channel — see
+  [Install in your organization](#install-in-your-organization) below.
 - An active **`rds-postgres-server`** service in the same nullplatform namespace with:
   - `status: active`
   - Matching dimensions (e.g., both services must have `cluster: prod`)
@@ -169,57 +168,60 @@ app secret. This is a wider blast radius than a read-only grant would be;
 narrowing it to per-instance secret ARNs would require generating the policy
 per service instance instead of once per cluster.
 
-### AssumeRole Setup Guide
+### Install in your organization
 
-Three separate pieces must all be in place for the agent to actually assume
-`nullplatform-<cluster_name>-rds-postgres-db-role` at runtime — applying
-`requirements/` alone is not enough:
+The service is published once as the package `np-rds-postgres-db` (specification "RDS PostgreSQL DB"), visible to every organization. You do not copy its specs: you install the package and use it read-only. How installing a package works, how it coexists with a copy you registered, how to upgrade, and when to fork instead are in the [package installation guide](https://docs.nullplatform.com/docs/packages/install); this section has what is specific to this service.
 
-1. **Apply `requirements/`** with `cluster_name` (and optionally
-   `agent_role_arn`) — creates the role and its trust policy (see above):
-   ```hcl
-   module "service_requirements_rds_postgres_db" {
-     source = "git::https://github.com/nullplatform/services-postgresql-rds.git//rds-postgres-db/specs/requirements/aws?ref=<tag>"
+Already registered a copy from the former `specs/install`? It keeps working: it called tofu-modules' `service_definition` on specs that stay in every release, and the package installs next to it, as the guide explains. If you sourced that directory as a module, pin its `?ref` to a release that still has it.
 
-     cluster_name = "<cluster-name>"
-     # agent_role_arn = ""  # optional override; defaults to
-     #   arn:aws:iam::<account-id>:role/nullplatform-<cluster-name>-agent-role
-   }
-   ```
-   Read `module.service_requirements_rds_postgres_db.permissions_role_arn`
-   for the ARN needed in steps 2 and 3 below.
-2. **Grant the agent permission to assume it.** Not managed by
-   `requirements/` — add an inline (or managed) policy to the **agent's own**
-   IAM role:
-   ```json
-   {
-     "Effect": "Allow",
-     "Action": "sts:AssumeRole",
-     "Resource": "arn:aws:iam::<account-id>:role/nullplatform-<cluster_name>-rds-postgres-db-role"
-   }
-   ```
-3. **Register the role as an `identity-access-control` provider** in
-   nullplatform, at the **account-level NRN**
-   (`organization=...:account=...` — no `:namespace=...`), with selector
-   `rds-postgres-db`. If `rds-postgres-server` is also installed in this
-   account, fold both selectors into the **same** provider instead of
-   registering a second one at the same NRN (see the comment in
-   `rds-postgres-server`'s `specs/install/aws/main.tf` for why a second,
-   independent registration breaks `assume_role_step`'s lookup):
-   ```hcl
-   module "identity_access_control" {
-     source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/identity-access-control?ref=<tag>"
-     nrn    = "organization=<org>:account=<account>"
-     attributes = {
-       iam_role_arns = {
-         arns = [
-           { selector = "rds-postgres-db", arn = "<role ARN from step 1>" },
-           # { selector = "rds-postgres-server", arn = "<rds-postgres-server's role ARN>" },
-         ]
-       }
-     }
-   }
-   ```
+Installing it touches the same three layers as registering a service yourself, and only the nullplatform layer changes:
+
+| Layer | What | Module |
+|---|---|---|
+| infrastructure (AWS credentials) | The IAM role the service assumes, with access to the state bucket | [`specs/requirements/aws`](specs/requirements/aws) |
+| nullplatform (nullplatform API key) | The installation of the package and the agent channel | tofu-modules' `service_package_installation` |
+| bindings | The role under selector `rds-postgres-db` in your IAM provider | your `aws-iam-configuration` provider |
+
+Pick ONE release of this repository (the latest is on its [releases page](https://github.com/nullplatform/services-postgresql-rds/releases)) and use its version in both places below: the IAM role is the one the worker of that same release expects. Both services of this repository share the release, so install them at the same version.
+
+```hcl
+# ── infrastructure layer ─────────────────────────────────────────────
+module "rds_postgres_db_requirements" {
+  source            = "git::https://github.com/nullplatform/services-postgresql-rds.git//rds-postgres-db/specs/requirements/aws?ref=vX.Y.Z"
+  cluster_name      = "<nullplatform agent cluster>"
+  state_bucket_name = "<existing S3 bucket for the tofu state>"
+}
+
+# The agent role must be allowed to assume it: add it to the assume_role_arns
+# of tofu-modules' infrastructure/aws/iam/agent.
+#   assume_role_arns = [..., module.rds_postgres_db_requirements.permissions_role_arn]
+
+# ── nullplatform layer ───────────────────────────────────────────────
+# For a service the installation is the whole nullplatform side, channel included.
+module "rds_postgres_db" {
+  source = "git::https://github.com/nullplatform/tofu-modules.git//nullplatform/service_package_installation?ref=v9.16.0"
+
+  nrn                  = var.nrn
+  package_slug         = "np-rds-postgres-db"
+  package_version      = "X.Y.Z" # the same release, without the v
+  agent_tags_selectors = { cluster = "runtime" } # must match the agent's TAGS
+}
+# Keeping channels in a separate bindings layer instead? Use
+# nullplatform/package_installation here and service_definition_agent_association
+# there, with package_slug = "np-rds-postgres-db".
+
+# ── bindings layer ───────────────────────────────────────────────────
+# One aws-iam-configuration per NRN and dimensions, at the account level: add
+# the entry to the list your IAM provider already has. Both services of this
+# repository go in the SAME provider, one selector each.
+#   { selector = "rds-postgres-db", arn = module.rds_postgres_db_requirements.permissions_role_arn }
+```
+
+**The state bucket.** Set `RDS_POSTGRES_S3_STATE_BUCKET` on the worker (a per-package env patch in tofu-modules' `nullplatform/agent`) to the name of an existing S3 bucket, and pass the same name to the requirements module as `state_bucket_name`. Every instance keeps its Terraform state there under `services/rds-postgres/<service-id>/`; both services share the bucket and the service id keeps their keys apart. The bucket must already exist: the service never creates or deletes it, and without the variable every action fails before touching AWS.
+
+The service assumes the role it finds under selector `rds-postgres-db` in the IAM provider closest to its NRN. To upgrade, move the release in both layers: `ref` of the requirements module and `package_version` of the installation. See tofu-modules' [`service_package_installation`](https://github.com/nullplatform/tofu-modules/tree/main/nullplatform/service_package_installation) for its inputs and outputs.
+
+Prerequisites: an agent whose `TAGS` match the channel's `tags_selectors`, with `public.ecr.aws/nullplatform/*` in `worker.allowedRegistries` and `np-rds-postgres-db` in its `worker_orchestrated_packages` (the worker then runs with the agent's identity, the one the role trusts); it needs no `aws-configuration` nor `aws-networking-configuration` provider, `build_context` reads `region` from `values.yaml`.
 
 `scripts/aws/assume_role_step` resolves the role by querying
 `np provider list --categories identity-access-control` with the service's
@@ -253,6 +255,10 @@ directly attached. This fail-open behavior is intentional (mirrors
 AssumeRole setup fails *silently* as what looks like a permissions problem
 rather than a missing-provider problem — check the `assume role` step's
 log line first when debugging `AccessDenied` errors from later steps.
+
+### How the package is published
+
+Every release publishes a new revision of the package from this repository, in the same run that pushes the worker image ([`.github/workflows/release.yml`](../.github/workflows/release.yml)): the `publish-package` job applies [`rds-postgres-db/publish`](publish), a stack on tofu-modules' `service_package_publish`, which pins this tag's specs and the image by digest. The package version is the release tag, as for the image. The stack keeps its state where the organization secrets `PACKAGE_STATE_AWS_ACCOUNT_ID`, `PACKAGE_TFSTATE_BUCKET` and `PACKAGE_TFSTATE_REGION` point; the state role is `github-actions-<repository>-package-state` in that account, by convention.
 
 ### Auto-Discovery NRN Requirement
 

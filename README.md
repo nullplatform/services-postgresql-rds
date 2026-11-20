@@ -9,11 +9,11 @@ nullplatform service definitions for AWS RDS PostgreSQL:
   the `connect` link.
 
 Each service directory is self-contained: `entrypoint/`, `workflows/`,
-`scripts/`, and `specs/` are read directly by the nullplatform agent at
-runtime. `specs/requirements/aws/` and `specs/install/aws/` contain one-time
-setup Terraform, applied out-of-band by an account operator — see each
-service's own README for the full setup guide ("AssumeRole Setup Guide") and
-`specs/install/README.md`.
+`scripts/` and `specs/` are what its worker image runs, and `publish/` is the
+stack that publishes it as a global package on every release (`np-rds-postgres`
+and `np-rds-postgres-db`, both at the release version). `specs/requirements/aws/`
+is the one-time IAM setup an organization applies before installing the package;
+see each service's README, "Install in your organization".
 
 This repository was extracted from `nullplatform/services` (the
 `databases/rds-postgres-server` and `databases/rds-postgres-db` directories),
